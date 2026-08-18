@@ -1,5 +1,6 @@
 import React from 'react';
 import { Phone, MapPin, ChevronRight, Heart, ShieldCheck } from 'lucide-react';
+import lkLogo from '../assets/lk_logo.jpg';
 
 const InstagramIcon = ({ className = "w-4 h-4" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -21,9 +22,11 @@ export default function Footer() {
           {/* Brand Column */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-zinc-950 font-black text-xl shadow-lg">
-                LK
-              </div>
+              <img
+                src={lkLogo}
+                alt="Litra King Logo"
+                className="w-12 h-12 rounded-full object-cover shadow-lg shadow-amber-500/30"
+              />
               <div>
                 <h3 className="text-xl font-extrabold text-white tracking-wider">LITRA KING</h3>
                 <p className="text-xs font-semibold text-amber-400 uppercase tracking-widest">SHOES ZONE • CHOMU</p>

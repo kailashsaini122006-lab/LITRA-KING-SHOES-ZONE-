@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import lkLogo from "../assets/lk_logo.jpg";
 
 export default function Preloader({ onComplete }) {
   const [progress, setProgress] = useState(0);
@@ -81,20 +82,11 @@ export default function Preloader({ onComplete }) {
             boxShadow: "0 0 40px rgba(245,158,11,0.2), inset 0 0 20px rgba(245,158,11,0.05)",
             animation: "preloader-logoGlow 3s ease-in-out infinite",
           }}>
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6 32C6 32 8 24 16 24L28 22C32 21.5 36 20 38 17C40 14 39 11 37 10C35 9 32 10 30 12L26 16C24 18 21 19 18 18L10 16C7 15 5 17 5 20V28C5 30.2 5.8 31.5 6 32Z" fill="url(#sg1)" />
-              <path d="M6 32C6 32 8 34 12 34H36C39 34 42 32 42 29C42 26 39 25 36 25.5L28 26.5C24 27 20 27.5 16 27C12 26.5 8 28 6 32Z" fill="url(#sg2)" />
-              <path d="M14 34V36C14 37.1 14.9 38 16 38C17.1 38 18 37.1 18 36V34H14Z" fill="#d97706" />
-              <path d="M28 34V36C28 37.1 28.9 38 30 38C31.1 38 32 37.1 32 36V34H28Z" fill="#d97706" />
-              <defs>
-                <linearGradient id="sg1" x1="5" y1="10" x2="40" y2="30" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stopColor="#fbbf24" /><stop offset="100%" stopColor="#d97706" />
-                </linearGradient>
-                <linearGradient id="sg2" x1="5" y1="25" x2="42" y2="35" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stopColor="#f59e0b" /><stop offset="100%" stopColor="#92400e" />
-                </linearGradient>
-              </defs>
-            </svg>
+            <img
+              src={lkLogo}
+              alt="Litra King Logo"
+              style={{ width: "64px", height: "64px", objectFit: "cover", borderRadius: "12px" }}
+            />
           </div>
           <div style={{ textAlign: "center" }}>
             <h1 style={{

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Phone, Menu, X, ShoppingBag, MapPin, Tag } from 'lucide-react';
+import lkLogo from '../assets/lk_logo.jpg';
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -33,9 +34,11 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         {/* Brand Logo */}
         <a href="#home" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 flex items-center justify-center text-zinc-950 font-black text-xl shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform">
-            LK
-          </div>
+          <img
+            src={lkLogo}
+            alt="Litra King Logo"
+            className="w-12 h-12 rounded-full object-cover shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform duration-300"
+          />
           <div className="flex flex-col">
             <span className="text-xl sm:text-2xl font-extrabold tracking-wider text-white flex items-center gap-1.5">
               LITRA KING
