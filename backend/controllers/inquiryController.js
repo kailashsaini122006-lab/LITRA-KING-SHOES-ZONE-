@@ -1,4 +1,5 @@
 const Inquiry = require('../models/Inquiry');
+const { sendInquiryEmail } = require('../utils/emailService');
 
 // POST /api/inquiries
 const createInquiry = async (req, res) => {
@@ -35,6 +36,11 @@ const createInquiry = async (req, res) => {
       phone: cleanPhone,
       inquiryType: inquiryType.trim(),
       message: message.trim(),
+    });
+
+    // --- Send Email Notification to Admin (Organized & Clean) ---
+    sendInquiryEmail(inquiry).catch((err) => {
+      console.error('Failed to send notification email:', err);
     });
 
     return res.status(201).json({
