@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Menu, X, ShoppingBag, MapPin, Tag } from 'lucide-react';
+import { Phone, Menu, X, Lock } from 'lucide-react';
 import lkLogo from '../assets/lk_logo.jpg';
 
-export default function Navbar() {
+export default function Navbar({ onDataAddClick }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -65,11 +65,19 @@ export default function Navbar() {
           ))}
         </nav>
 
-        {/* Desktop Call Action Button */}
+        {/* Desktop Action Buttons: Call & Data Add */}
         <div className="hidden md:flex items-center space-x-3">
+          <button
+            onClick={onDataAddClick}
+            className="flex items-center gap-2 bg-zinc-900 border border-amber-500/50 hover:bg-amber-500/20 text-amber-400 px-4 py-2 rounded-full font-extrabold text-sm shadow-md transition-all hover:scale-105"
+          >
+            <Lock className="w-4 h-4 text-amber-400" />
+            <span>Data Add</span>
+          </button>
+
           <a
             href="tel:9257575393"
-            className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 px-5 py-2.5 rounded-full font-bold text-sm shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-all hover:scale-105"
+            className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 px-5 py-2 rounded-full font-bold text-sm shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-all hover:scale-105"
           >
             <Phone className="w-4 h-4 fill-zinc-950" />
             <span>Call: 9257575393</span>
@@ -101,6 +109,17 @@ export default function Navbar() {
               </a>
             ))}
           </div>
+
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              onDataAddClick();
+            }}
+            className="flex items-center justify-center gap-2 bg-zinc-900 border border-amber-500/60 text-amber-400 py-3 rounded-xl font-extrabold text-base w-full hover:bg-amber-500/20 transition-all"
+          >
+            <Lock className="w-5 h-5 text-amber-400" />
+            <span>Data Add</span>
+          </button>
 
           <a
             href="tel:9257575393"

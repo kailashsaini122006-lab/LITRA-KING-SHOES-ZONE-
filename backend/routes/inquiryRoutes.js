@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { createInquiry } = require('../controllers/inquiryController');
+const { createInquiry, getInquiries } = require('../controllers/inquiryController');
 
-// POST /api/inquiries
+// /api/inquiries
 router.post('/', createInquiry);
+router.get('/', getInquiries);
 
 module.exports = router;

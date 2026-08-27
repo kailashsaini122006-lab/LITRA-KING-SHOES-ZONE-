@@ -6,31 +6,28 @@ const createInquiry = async (req, res) => {
   try {
     const { name, phone, inquiryType, message } = req.body;
 
-    // --- Basic presence check (before Mongoose validation) ---
     const missing = [];
-    if (!name || !name.trim()) missing.push('Name');
-    if (!phone || !phone.trim()) missing.push('Phone number');
-    if (!inquiryType || !inquiryType.trim()) missing.push('Inquiry type');
-    if (!message || !message.trim()) missing.push('Message');
+    if (!name || !name.trim()) missing.push('Your Name');
+    if (!phone || !phone.trim()) missing.push('Phone Number');
+    if (!inquiryType || !inquiryType.trim()) missing.push('Inquiry Type');
+    if (!message || !message.trim()) missing.push('Message / Requirements');
 
     if (missing.length > 0) {
       return res.status(400).json({
         success: false,
-        message: `Please fill in: ${missing.join(', ')}`,
+        message: `Please fill in required fields: ${missing.join(', ')}`,
       });
     }
 
-    // --- Phone format check ---
-    const phoneRegex = /^[6-9]\d{9}$/;
-    const cleanPhone = phone.trim().replace(/\s|-/g, '');
-    if (!phoneRegex.test(cleanPhone)) {
+    const cleanPhone = phone.toString().trim().replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
       return res.status(400).json({
         success: false,
-        message: 'Please enter a valid 10-digit Indian mobile number (starting with 6-9).',
+        message: 'Please enter a valid 10-digit mobile number.',
       });
     }
 
-    // --- Save to MongoDB ---
+    // Save to MongoDB (inquiries collection)
     const inquiry = await Inquiry.create({
       name: name.trim(),
       phone: cleanPhone,
@@ -38,36 +35,51 @@ const createInquiry = async (req, res) => {
       message: message.trim(),
     });
 
-    // --- Send Email Notification to Admin (Organized & Clean) ---
+    console.log(`✅ [MongoDB Saved] New Instant Inquiry created for ${inquiry.name} (${inquiry.phone})`);
+
+    // Dispatch email notification if SMTP is configured
     sendInquiryEmail(inquiry).catch((err) => {
-      console.error('Failed to send notification email:', err);
+      console.error('Failed to send notification email:', err.message);
     });
 
     return res.status(201).json({
       success: true,
-      message: 'Inquiry submitted successfully! We will contact you shortly.',
-      data: {
-        id: inquiry._id,
-        name: inquiry.name,
-        createdAt: inquiry.createdAt,
-      },
+      message: 'Data Added Successfully!',
+      data: inquiry,
     });
   } catch (error) {
-    // Mongoose validation errors
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({
         success: false,
-        message: messages[0], // show first error
+        message: messages[0],
       });
     }
 
     console.error('Error saving inquiry:', error);
     return res.status(500).json({
       success: false,
-      message: 'Something went wrong on our end. Please try again or call us directly.',
+      message: 'Failed to save inquiry to MongoDB: ' + error.message,
     });
   }
 };
 
-module.exports = { createInquiry };
+// GET /api/inquiries
+const getInquiries = async (req, res) => {
+  try {
+    const records = await Inquiry.find().sort({ createdAt: -1 }).limit(100);
+    return res.json({
+      success: true,
+      count: records.length,
+      data: records,
+    });
+  } catch (error) {
+    console.error('Error fetching inquiries:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inquiries: ' + error.message,
+    });
+  }
+};
+
+module.exports = { createInquiry, getInquiries };

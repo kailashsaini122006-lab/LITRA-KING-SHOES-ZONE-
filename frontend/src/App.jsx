@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Preloader from './components/Preloader';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
@@ -12,8 +12,48 @@ import ContactSection from './components/ContactSection';
 import MobileActionBar from './components/MobileActionBar';
 import Footer from './components/Footer';
 
+import SecurityModal from './components/SecurityModal';
+import DataEntryModal from './components/DataEntryModal';
+
 export default function App() {
   const [loading, setLoading] = useState(true);
+  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
+  const [isDataEntryOpen, setIsDataEntryOpen] = useState(false);
+  const [accessToken, setAccessToken] = useState('');
+
+  useEffect(() => {
+    // Direct URL route protection (#register or #data-add or /register or /data-add)
+    const checkDirectUrlRoute = () => {
+      const hash = window.location.hash;
+      const pathname = window.location.pathname;
+
+      if (
+        hash === '#register' ||
+        hash === '#data-add' ||
+        pathname.includes('/register') ||
+        pathname.includes('/data-add')
+      ) {
+        handleDataAddClick();
+      }
+    };
+
+    checkDirectUrlRoute();
+    window.addEventListener('hashchange', checkDirectUrlRoute);
+    return () => window.removeEventListener('hashchange', checkDirectUrlRoute);
+  }, []);
+
+  const handleDataAddClick = () => {
+    // Always prompt for 4-Digit Security PIN when Data Add is clicked
+    setIsDataEntryOpen(false);
+    setIsSecurityOpen(true);
+  };
+
+  const handleAuthSuccess = (token) => {
+    setAccessToken(token);
+    sessionStorage.setItem('lk_access_token', token);
+    setIsSecurityOpen(false);
+    setIsDataEntryOpen(true);
+  };
 
   return (
     <>
@@ -25,7 +65,7 @@ export default function App() {
           transition: 'opacity 0.5s ease',
         }}
       >
-        <Navbar />
+        <Navbar onDataAddClick={handleDataAddClick} />
         <main>
           <Hero />
           <AboutUs />
@@ -38,6 +78,24 @@ export default function App() {
         </main>
         <Footer />
         <MobileActionBar />
+
+        {/* 4-Digit Security PIN Verification Modal */}
+        <SecurityModal
+          isOpen={isSecurityOpen}
+          onClose={() => setIsSecurityOpen(false)}
+          onAuthSuccess={handleAuthSuccess}
+        />
+
+        {/* Saved Records Portal (Opens only after successful PIN verification) */}
+        <DataEntryModal
+          isOpen={isDataEntryOpen}
+          onClose={() => {
+            setIsDataEntryOpen(false);
+            setAccessToken('');
+            sessionStorage.removeItem('lk_access_token');
+          }}
+          accessToken={accessToken}
+        />
       </div>
     </>
   );

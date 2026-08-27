@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Phone, MessageCircle, Navigation, MapPin, Send, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { getApiUrl } from '../config/api';
 
 const InstagramIcon = ({ className = "w-5 h-5" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -20,98 +21,69 @@ export default function ContactSection() {
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [formData, setFormData] = useState(INITIAL_FORM);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
 
-    // ── Client-side quick checks ───────────────────────────────────────────
-    const phoneRegex = /^[6-9]\d{9}$/;
-    const cleanPhone = formData.phone.trim().replace(/\s|-/g, '');
-
+    // ── Client-side Field Validation ─────────────────────────────────────────
     if (!formData.name.trim()) {
       setErrorMsg('Please enter your name.');
       return;
     }
-    if (!cleanPhone || !phoneRegex.test(cleanPhone)) {
-      setErrorMsg('Please enter a valid 10-digit Indian mobile number (e.g. 9257575393).');
+
+    const cleanPhone = formData.phone.toString().trim().replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setErrorMsg('Please enter a valid 10-digit mobile number (e.g. 9257553930).');
       return;
     }
+
+    if (!formData.type.trim()) {
+      setErrorMsg('Please select an inquiry type.');
+      return;
+    }
+
     if (!formData.message.trim()) {
       setErrorMsg('Please enter your message or requirements.');
       return;
     }
 
-    // ── Prepare WhatsApp link helper ──────────────────────────────────────
-    const sendViaWhatsApp = () => {
-      const waText = `*New Inquiry - Litra King Shoes Zone*\n*Name:* ${formData.name.trim()}\n*Phone:* ${cleanPhone}\n*Inquiry Type:* ${formData.type}\n*Message:* ${formData.message.trim()}`;
-      const waUrl = `https://wa.me/919257575393?text=${encodeURIComponent(waText)}`;
-      window.open(waUrl, '_blank');
-      setSubmitted(true);
-      setFormData(INITIAL_FORM);
-      setTimeout(() => setSubmitted(false), 6000);
-    };
-
-    // ── API call ───────────────────────────────────────────────────────────
-    let apiUrl = import.meta.env.VITE_API_URL || '';
-    if (!apiUrl && typeof window !== 'undefined') {
-      const host = window.location.hostname;
-      const isLocal =
-        host === 'localhost' ||
-        host === '127.0.0.1' ||
-        host.startsWith('192.168.') ||
-        host.startsWith('10.') ||
-        host === '0.0.0.0' ||
-        host.endsWith('.local');
-
-      if (isLocal) {
-        apiUrl = `http://${host || 'localhost'}:5000`;
-      }
-    }
-
-    // If still no API URL (e.g. production without backend), send directly via WhatsApp
-    if (!apiUrl) {
-      sendViaWhatsApp();
-      return;
-    }
-
     setIsLoading(true);
+
     try {
-      const res = await fetch(`${apiUrl}/api/inquiries`, {
+      const res = await fetch(getApiUrl('/inquiries'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name.trim(),
           phone: cleanPhone,
-          inquiryType: formData.type,
+          inquiryType: formData.type.trim(),
           message: formData.message.trim(),
         }),
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        // Non-JSON response, fallback to WhatsApp
-        sendViaWhatsApp();
-        return;
-      }
+      const data = await res.json().catch(() => null);
 
-      if (!res.ok || !data.success) {
-        setErrorMsg(data.message || 'Could not submit inquiry to server. Try sending via WhatsApp.');
-        return;
-      }
+      if (res.ok && data && data.success) {
+        setSuccessMsg(data.message || 'Data Added Successfully!');
+        setSubmitted(true);
+        setFormData(INITIAL_FORM); // Automatically clear form
 
-      // ── Success ────────────────────────────────────────────────────────
-      setSubmitted(true);
-      setFormData(INITIAL_FORM);
-      setTimeout(() => setSubmitted(false), 5000);
+        setTimeout(() => {
+          setSubmitted(false);
+          setSuccessMsg('');
+        }, 5000);
+      } else {
+        const msg = data?.message || `Server Error (${res.status}): Failed to save inquiry.`;
+        setErrorMsg(msg);
+      }
     } catch (err) {
-      console.warn('[ContactForm] Backend connection issue:', err);
-      // If backend is unreachable or offline, seamlessly open WhatsApp with message
-      sendViaWhatsApp();
-    } finally {
+      console.error('[ContactForm] Error submitting inquiry:', err);
+      setErrorMsg(`Connection Error (${err.message}). Make sure backend server is running.`);
+    } fontally: {
       setIsLoading(false);
     }
   };
@@ -219,8 +191,8 @@ export default function ContactSection() {
             {submitted ? (
               <div className="p-8 bg-emerald-950/60 border border-emerald-500/50 rounded-2xl text-center space-y-3 animate-fadeIn">
                 <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-                <h4 className="text-xl font-bold text-white">Inquiry Submitted Successfully!</h4>
-                <p className="text-zinc-300 text-sm">Thank you for reaching out to Litra King Shoes Zone. We will call you back shortly.</p>
+                <h4 className="text-xl font-bold text-white">{successMsg || 'Data Added Successfully!'}</h4>
+                <p className="text-zinc-300 text-sm">Thank you for reaching out to Litra King Shoes Zone. Your inquiry has been saved into MongoDB.</p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -234,7 +206,7 @@ export default function ContactSection() {
                 )}
 
                 <div>
-                  <label className="block text-xs text-zinc-300 font-semibold mb-1">Your Name</label>
+                  <label className="block text-xs text-zinc-300 font-semibold mb-1">Your Name *</label>
                   <input
                     type="text"
                     required
@@ -246,19 +218,19 @@ export default function ContactSection() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-zinc-300 font-semibold mb-1">Phone Number</label>
+                  <label className="block text-xs text-zinc-300 font-semibold mb-1">Phone Number *</label>
                   <input
                     type="tel"
                     required
                     value={formData.phone}
                     onChange={(e) => { setFormData({ ...formData, phone: e.target.value }); setErrorMsg(''); }}
-                    placeholder="9257575393"
+                    placeholder="9257553930"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-amber-400 transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-zinc-300 font-semibold mb-1">Inquiry Type</label>
+                  <label className="block text-xs text-zinc-300 font-semibold mb-1">Inquiry Type *</label>
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
@@ -271,7 +243,7 @@ export default function ContactSection() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-zinc-300 font-semibold mb-1">Message / Requirements</label>
+                  <label className="block text-xs text-zinc-300 font-semibold mb-1">Message / Requirements *</label>
                   <textarea
                     rows="3"
                     required
