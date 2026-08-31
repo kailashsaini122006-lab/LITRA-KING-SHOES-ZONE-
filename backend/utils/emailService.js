@@ -480,10 +480,118 @@ If you did not request a password reset, please ignore this email.
   }
 }
 
+/**
+ * Sends Security PIN Reset OTP email to configured admin.
+ */
+async function sendPinResetEmail({ email, otp }) {
+  const recipient = email || process.env.ADMIN_EMAIL || DEFAULT_RECIPIENT;
+  const transporter = createTransporter();
+
+  const formattedDate = new Date().toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'full',
+    timeStyle: 'medium',
+  });
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Security PIN Reset Code - Litra King Shoes Zone</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0f0f11; font-family: 'Segoe UI', Roboto, sans-serif; color: #f4f4f5;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #0f0f11; padding: 30px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background: #18181b; border: 1px solid #f59e0b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #18181b 0%, #27272a 100%); border-bottom: 2px solid #f59e0b; padding: 30px 25px; text-align: center;">
+              <h1 style="margin: 0; color: #f59e0b; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;">
+                👑 LITRA KING <span style="color: #ffffff;">(SHOES ZONE)</span>
+              </h1>
+              <p style="margin: 6px 0 0 0; color: #a1a1aa; font-size: 13px; letter-spacing: 0.5px;">
+                Security PIN Reset Verification Code
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 30px; text-align: center;">
+              <p style="margin: 0 0 10px 0; color: #d4d4d8; font-size: 14px;">
+                Use the following 6-digit code to reset your 4-digit Security PIN. Valid for <strong>10 minutes</strong>.
+              </p>
+              <div style="display: inline-block; background-color: #09090b; border: 2px dashed #f59e0b; border-radius: 12px; padding: 18px 36px; margin: 15px 0;">
+                <span style="color: #fbbf24; font-size: 36px; font-weight: 900; letter-spacing: 8px; font-family: monospace;">
+                  ${otp}
+                </span>
+              </div>
+              <p style="margin: 15px 0 0 0; color: #71717a; font-size: 12px;">
+                Request Date &amp; Time: ${formattedDate}
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 30px 24px 30px;">
+              <div style="background-color: #27272a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px 20px; color: #a1a1aa; font-size: 13px; line-height: 1.5;">
+                🔒 <strong>Security Warning:</strong> If you did not request a Security PIN reset, please ignore this email.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #09090b; border-top: 1px solid #27272a; padding: 18px 30px; text-align: center; color: #71717a; font-size: 12px;">
+              Litra King Shoes Zone • Chomu, Rajasthan, India
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  const plainText = `
+Litra King Shoes Zone - Security PIN Reset Code
+----------------------------------------------
+Your 6-digit Security PIN reset verification code is: ${otp}
+
+This code is valid for 10 minutes.
+Date: ${formattedDate}
+
+If you did not request a PIN reset, please ignore this email.
+  `.trim();
+
+  if (!transporter) {
+    console.log('\n📧 [Security PIN Reset OTP - Simulated (SMTP credentials not yet set in .env)]');
+    console.log(`To: ${recipient}`);
+    console.log(`Subject: 🔑 Security PIN Reset Verification Code (Litra King Shoes Zone)`);
+    console.log(plainText);
+    console.log('--------------------------------------------------\n');
+    return { success: true, simulated: true };
+  }
+
+  try {
+    const sender = process.env.SMTP_FROM || process.env.SMTP_USER || 'Litra King Security <no-reply@litraking.com>';
+    const info = await transporter.sendMail({
+      from: sender,
+      to: recipient,
+      subject: `🔑 Security PIN Reset Verification Code (Litra King Shoes Zone)`,
+      text: plainText,
+      html: htmlContent,
+    });
+    console.log(`✅ [Security PIN Reset] Email sent successfully to ${recipient}. MessageId: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (err) {
+    console.error('❌ [Security PIN Reset] Failed to send email via SMTP:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   sendInquiryEmail,
   sendSecurityAlertEmail,
   sendPasswordResetEmail,
+  sendPinResetEmail,
   DEFAULT_RECIPIENT,
 };
 

@@ -74,6 +74,13 @@ app.use('/api/data-entry', dataEntryRoutes);
 app.post('/api/verify-pin', authController.verifyPin);
 app.post('/api/login', authController.login);
 app.post('/api/verify-password', authController.login);
+app.get('/api/security-pin/masked-email', authController.getMaskedAdminEmail);
+app.post('/api/security-pin/forgot', authController.forgotSecurityPin);
+app.post('/api/security-pin/verify-reset-code', authController.verifySecurityPinResetCode);
+app.post('/api/security-pin/reset', authController.resetSecurityPin);
+app.post('/api/forgot-pin', authController.forgotSecurityPin);
+app.post('/api/verify-pin-otp', authController.verifySecurityPinResetCode);
+app.post('/api/reset-pin', authController.resetSecurityPin);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 app.use((req, res) => {

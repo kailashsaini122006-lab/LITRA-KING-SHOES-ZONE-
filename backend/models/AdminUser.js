@@ -33,6 +33,26 @@ const adminUserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    pinResetOtp: {
+      type: String,
+      default: null,
+    },
+    pinResetOtpExpires: {
+      type: Date,
+      default: null,
+    },
+    pinResetOtpUsed: {
+      type: Boolean,
+      default: false,
+    },
+    pinResetAttempts: {
+      type: Number,
+      default: 0,
+    },
+    pinResetLastRequested: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
