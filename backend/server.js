@@ -9,6 +9,9 @@ const cors = require('cors');
 const inquiryRoutes = require('./routes/inquiryRoutes');
 const authRoutes = require('./routes/authRoutes');
 const dataEntryRoutes = require('./routes/dataEntryRoutes');
+const productRoutes = require('./routes/productRoutes');
+const orderRoutes = require('./routes/orderRoutes');
+const productController = require('./controllers/productController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -69,6 +72,8 @@ const authController = require('./controllers/authController');
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/data-entry', dataEntryRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Direct Route Aliases for maximum compatibility
 app.post('/api/verify-pin', authController.verifyPin);
@@ -161,6 +166,7 @@ mongoose
   .then(() => {
     const uriType = MONGODB_URI.startsWith('mongodb+srv') ? 'Atlas (cloud)' : 'local';
     console.log(`✅  MongoDB connected successfully [${uriType}]`);
+    productController.seedProductsIfEmpty();
   })
   .catch((err) => {
     console.warn('⚠️   MongoDB initial connection warning:', err.message);

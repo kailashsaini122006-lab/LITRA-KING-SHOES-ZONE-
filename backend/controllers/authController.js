@@ -36,7 +36,7 @@ async function getOrCreateAdminUser(reqEmail) {
       admin.password = bcrypt.hashSync(configuredEnvPass, 10);
       updated = true;
     }
-    if (!admin.securityPin) {
+    if (!admin.securityPin || (process.env.ADMIN_SECURITY_PIN && !bcrypt.compareSync(configuredEnvPin, admin.securityPin))) {
       admin.securityPin = bcrypt.hashSync(configuredEnvPin, 10);
       updated = true;
     }
