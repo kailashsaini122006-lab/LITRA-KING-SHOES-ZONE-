@@ -4,7 +4,8 @@ import { CheckCircle2, PackageCheck, MapPin, Truck, ShoppingBag, CreditCard, Shi
 export default function OrderConfirmationModal({ order, isOpen, onClose, onTrackOrder }) {
   if (!isOpen || !order) return null;
 
-  const isOnlinePayment = order.paymentMethod === 'Online Payment' || order.paymentMethod === 'Razorpay';
+  const isUpi = order.paymentMethod === 'UPI';
+  const isOnlinePayment = order.paymentMethod === 'Online Payment' || order.paymentMethod === 'Razorpay' || isUpi;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
@@ -18,7 +19,7 @@ export default function OrderConfirmationModal({ order, isOpen, onClose, onTrack
         {/* Heading */}
         <div className="space-y-1">
           <span className="text-amber-400 font-extrabold uppercase tracking-widest text-xs">
-            {isOnlinePayment ? 'Payment Verified & Confirmed' : 'Order Confirmation'}
+            {isUpi ? 'UPI Payment Verification Pending' : isOnlinePayment ? 'Payment Verified & Confirmed' : 'Order Confirmation'}
           </span>
           <h2 className="text-2xl sm:text-3xl font-black text-white">🎉 Order Placed Successfully!</h2>
           <p className="text-xs text-zinc-400 max-w-sm mx-auto">
@@ -44,13 +45,19 @@ export default function OrderConfirmationModal({ order, isOpen, onClose, onTrack
                 ) : (
                   <Truck className="w-3.5 h-3.5 text-amber-400" />
                 )}
-                {order.paymentMethod || 'Cash on Delivery'}
+                {order.paymentMethod || 'COD'}
               </span>
             </div>
 
             <div>
               <span className="text-zinc-500 block">Payment Status:</span>
-              <span className="font-bold text-emerald-400 bg-emerald-950 border border-emerald-800 px-2 py-0.5 rounded text-[11px] inline-block mt-0.5">
+              <span className={`font-bold border px-2 py-0.5 rounded text-[11px] inline-block mt-0.5 ${
+                order.paymentStatus === 'Paid'
+                  ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                  : order.paymentStatus === 'Pending Verification'
+                  ? 'bg-amber-950/80 text-amber-300 border-amber-800'
+                  : 'bg-zinc-900 text-zinc-300 border-zinc-700'
+              }`}>
                 {order.paymentStatus || 'Pending'}
               </span>
             </div>
@@ -68,12 +75,24 @@ export default function OrderConfirmationModal({ order, isOpen, onClose, onTrack
             </div>
 
             <div>
-              <span className="text-zinc-500 block">Grand Total Amount:</span>
+              <span className="text-zinc-500 block">Grand Total:</span>
               <span className="font-mono font-black text-amber-400 text-sm mt-0.5 block">
                 ₹{order.totalAmount}
               </span>
             </div>
           </div>
+
+          {isUpi && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-300 space-y-1">
+              <span className="font-bold flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                Payment Status: Pending Verification
+              </span>
+              <p className="text-zinc-400 text-[10px]">
+                Our team will cross-check your Paytm UPI payment against our bank records before dispatching your order.
+              </p>
+            </div>
+          )}
 
           <div className="pt-2 border-t border-zinc-800/80 text-[11px] text-zinc-400 flex items-start gap-1.5">
             <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />

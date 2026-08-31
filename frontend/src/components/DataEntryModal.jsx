@@ -387,12 +387,15 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                                 className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-zinc-950 border focus:outline-none ${
                                   ord.paymentStatus === 'Paid'
                                     ? 'text-emerald-400 border-emerald-800'
+                                    : ord.paymentStatus === 'Payment Failed' || ord.paymentStatus === 'Failed'
+                                    ? 'text-red-400 border-red-800'
                                     : 'text-amber-300 border-amber-800'
                                 }`}
                               >
                                 <option value="Pending">Pending</option>
+                                <option value="Pending Verification">Pending Verification</option>
                                 <option value="Paid">Paid</option>
-                                <option value="Failed">Failed</option>
+                                <option value="Payment Failed">Payment Failed</option>
                               </select>
                             </td>
 
@@ -581,25 +584,56 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
             <div className="p-6 overflow-y-auto space-y-5 text-xs">
               
               {/* Status Update Control */}
-              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <span className="text-zinc-400 block text-[11px]">Current Order Status:</span>
-                  <span className="text-amber-400 font-extrabold text-sm">{selectedAdminOrder.orderStatus}</span>
+              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div>
+                    <span className="text-zinc-400 block text-[11px]">Order Status:</span>
+                    <span className="text-amber-400 font-extrabold text-sm">{selectedAdminOrder.orderStatus}</span>
+                  </div>
+                  <div className="border-l border-zinc-800 pl-4">
+                    <span className="text-zinc-400 block text-[11px]">Payment Method & Status:</span>
+                    <span className="text-white font-bold text-xs">{selectedAdminOrder.paymentMethod}</span>
+                    <span className={`ml-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded border inline-block ${
+                      selectedAdminOrder.paymentStatus === 'Paid'
+                        ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
+                        : selectedAdminOrder.paymentStatus === 'Payment Failed' || selectedAdminOrder.paymentStatus === 'Failed'
+                        ? 'bg-red-950 text-red-400 border-red-800'
+                        : 'bg-amber-950 text-amber-300 border-amber-800'
+                    }`}>
+                      {selectedAdminOrder.paymentStatus}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-zinc-300 font-bold">Update Status:</span>
-                  <select
-                    value={selectedAdminOrder.orderStatus}
-                    onChange={(e) => handleUpdateOrderStatus(selectedAdminOrder.orderId, e.target.value, null)}
-                    className="bg-zinc-900 border border-amber-500 text-amber-400 font-bold text-xs rounded-xl px-3 py-2 focus:outline-none"
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Confirmed">Confirmed</option>
-                    <option value="Shipped">Shipped</option>
-                    <option value="Delivered">Delivered</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-zinc-400 font-bold text-[11px]">Payment Status:</span>
+                    <select
+                      value={selectedAdminOrder.paymentStatus}
+                      onChange={(e) => handleUpdateOrderStatus(selectedAdminOrder.orderId, null, e.target.value)}
+                      className="bg-zinc-900 border border-zinc-700 text-white font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-400"
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Pending Verification">Pending Verification</option>
+                      <option value="Paid">Paid</option>
+                      <option value="Payment Failed">Payment Failed</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-zinc-400 font-bold text-[11px]">Order Status:</span>
+                    <select
+                      value={selectedAdminOrder.orderStatus}
+                      onChange={(e) => handleUpdateOrderStatus(selectedAdminOrder.orderId, e.target.value, null)}
+                      className="bg-zinc-900 border border-amber-500 text-amber-400 font-bold text-xs rounded-xl px-3 py-1.5 focus:outline-none"
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Confirmed">Confirmed</option>
+                      <option value="Shipped">Shipped</option>
+                      <option value="Delivered">Delivered</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 

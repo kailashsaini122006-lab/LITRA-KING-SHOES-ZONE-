@@ -414,8 +414,8 @@ exports.createOrder = async (req, res) => {
       subtotal: calculatedSubtotal,
       deliveryCharge,
       totalAmount: grandTotal,
-      paymentMethod: paymentMethod === 'Razorpay' || paymentMethod === 'Online Payment' ? 'Online Payment' : 'COD',
-      paymentStatus: paymentMethod === 'Razorpay' || paymentMethod === 'Online Payment' ? 'Paid' : 'Pending',
+      paymentMethod: paymentMethod === 'UPI' ? 'UPI' : (paymentMethod === 'Razorpay' || paymentMethod === 'Online Payment' ? 'Online Payment' : 'COD'),
+      paymentStatus: paymentMethod === 'UPI' ? 'Pending Verification' : (paymentMethod === 'Razorpay' || paymentMethod === 'Online Payment' ? 'Paid' : 'Pending'),
       orderStatus: 'Pending',
     });
 
@@ -531,7 +531,7 @@ exports.updateOrderStatus = async (req, res) => {
     const { orderStatus, paymentStatus } = req.body;
 
     const validStatuses = ['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'];
-    const validPaymentStatuses = ['Pending', 'Paid', 'Failed', 'Payment Processing'];
+    const validPaymentStatuses = ['Pending', 'Pending Verification', 'Paid', 'Failed', 'Payment Failed', 'Payment Processing'];
 
     if (orderStatus && !validStatuses.includes(orderStatus)) {
       return res.status(400).json({

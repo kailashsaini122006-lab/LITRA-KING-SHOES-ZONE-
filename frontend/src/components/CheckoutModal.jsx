@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, ShieldCheck, MapPin, Truck, AlertCircle, RefreshCw, Lock, Zap, CreditCard } from 'lucide-react';
+import { X, CheckCircle2, ShieldCheck, MapPin, Truck, AlertCircle, RefreshCw, Lock, Zap, QrCode, AlertTriangle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { getApiUrl } from '../config/api';
 
@@ -17,9 +17,14 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const { cartItems, getCartSubtotal, clearCart } = useCart();
 
   const [formData, setFormData] = useState(INITIAL_FORM);
-  const [paymentMethod, setPaymentMethod] = useState('COD'); // 'COD' | 'Online Payment'
+  const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI' | 'COD'
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // UPI Specific State
+  const [hasClickedCompletedPayment, setHasClickedCompletedPayment] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [userConfirmedPayment, setUserConfirmedPayment] = useState(false);
 
   if (!isOpen) return null;
 
@@ -32,42 +37,66 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     setErrorMessage('');
   };
 
-  const handleSubmitOrder = async (e) => {
-    e.preventDefault();
-    setErrorMessage('');
-
-    // ── Client-side Field Validation ───────────────────────────────────────────
+  const validateAddressForm = () => {
     if (!formData.name.trim()) {
       setErrorMessage('Please enter your full name.');
-      return;
+      return false;
     }
 
     const cleanPhone = formData.phone.toString().trim().replace(/\D/g, '');
     if (!cleanPhone || cleanPhone.length < 10) {
       setErrorMessage('Please enter a valid 10-digit mobile number (e.g. 9257575393).');
-      return;
+      return false;
     }
 
     if (!formData.address.trim()) {
       setErrorMessage('Please enter your House/Shop/Street Address.');
-      return;
+      return false;
     }
 
     if (!formData.city.trim()) {
       setErrorMessage('Please enter your City name.');
-      return;
+      return false;
     }
 
     const cleanPincode = formData.pincode.toString().trim().replace(/\D/g, '');
     if (!cleanPincode || cleanPincode.length !== 6) {
       setErrorMessage('Please enter a valid 6-digit postal pincode.');
-      return;
+      return false;
     }
 
     if (cartItems.length === 0) {
       setErrorMessage('Your shopping cart is empty.');
+      return false;
+    }
+
+    return true;
+  };
+
+  // Triggered when customer clicks "I Have Completed Payment" or submits form
+  const handleInitiateUpiConfirmation = (e) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+
+    if (!validateAddressForm()) {
       return;
     }
+
+    setHasClickedCompletedPayment(true);
+    setShowConfirmationModal(true);
+  };
+
+  // Final submission of order to backend MongoDB API
+  const executeOrderSubmission = async () => {
+    setErrorMessage('');
+
+    if (!validateAddressForm()) {
+      setShowConfirmationModal(false);
+      return;
+    }
+
+    const cleanPhone = formData.phone.toString().trim().replace(/\D/g, '');
+    const cleanPincode = formData.pincode.toString().trim().replace(/\D/g, '');
 
     const payloadCustomer = {
       name: formData.name.trim(),
@@ -89,156 +118,62 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       image: item.image,
     }));
 
-    // ── FLOW A: CASH ON DELIVERY (COD) ────────────────────────────────────────
-    if (paymentMethod === 'COD') {
-      try {
-        setLoading(true);
-        const res = await fetch(getApiUrl('/orders'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customer: payloadCustomer,
-            items: payloadItems,
-            paymentMethod: 'COD',
-          }),
-        });
-
-        const data = await res.json().catch(() => null);
-
-        if (res.ok && data && data.success) {
-          clearCart();
-          setFormData(INITIAL_FORM);
-          onClose();
-          if (onOrderPlaced) {
-            onOrderPlaced(data.order);
-          }
-        } else {
-          setErrorMessage(data?.message || 'Order creation failed. Please try again.');
-        }
-      } catch (err) {
-        console.error('COD Order error:', err);
-        setErrorMessage(`Connection Error (${err.message}). Make sure backend server is running.`);
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    // ── FLOW B: RAZORPAY ONLINE PAYMENT (UPI / CARDS / NETBANKING) ───────────
     try {
       setLoading(true);
-
-      // 1. Initialize Razorpay Order on Backend
-      const initRes = await fetch(getApiUrl('/orders/razorpay-init'), {
+      const res = await fetch(getApiUrl('/orders'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer: payloadCustomer,
           items: payloadItems,
+          paymentMethod: paymentMethod === 'UPI' ? 'UPI' : 'COD',
         }),
       });
 
-      const initData = await initRes.json().catch(() => null);
+      const data = await res.json().catch(() => null);
 
-      if (!initRes.ok || !initData || !initData.success) {
-        setErrorMessage(initData?.message || 'Failed to initialize online payment.');
-        setLoading(false);
-        return;
-      }
-
-      // Handler callback to verify payment on backend
-      const handlePaymentVerification = async (rzpPaymentId, rzpOrderId, rzpSignature) => {
-        try {
-          const verifyRes = await fetch(getApiUrl('/orders/razorpay-verify'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              razorpay_order_id: rzpOrderId,
-              razorpay_payment_id: rzpPaymentId,
-              razorpay_signature: rzpSignature,
-              customer: payloadCustomer,
-              items: payloadItems,
-            }),
-          });
-
-          const verifyData = await verifyRes.json().catch(() => null);
-
-          if (verifyRes.ok && verifyData && verifyData.success) {
-            clearCart();
-            setFormData(INITIAL_FORM);
-            onClose();
-            if (onOrderPlaced) {
-              onOrderPlaced(verifyData.order);
-            }
-          } else {
-            setErrorMessage(verifyData?.message || 'Payment verification failed on backend.');
-          }
-        } catch (vErr) {
-          console.error('Verification error:', vErr);
-          setErrorMessage(`Payment verification error (${vErr.message}).`);
-        } finally {
-          setLoading(false);
+      if (res.ok && data && data.success) {
+        clearCart();
+        setFormData(INITIAL_FORM);
+        setShowConfirmationModal(false);
+        setHasClickedCompletedPayment(false);
+        setUserConfirmedPayment(false);
+        onClose();
+        if (onOrderPlaced) {
+          onOrderPlaced(data.order);
         }
-      };
-
-      // Check if Razorpay Checkout SDK is loaded in window
-      if (window.Razorpay) {
-        const options = {
-          key: initData.keyId,
-          amount: initData.amount,
-          currency: initData.currency || 'INR',
-          name: 'LITRA KING (SHOES ZONE)',
-          description: `Footwear Order Payment (₹${grandTotal})`,
-          order_id: initData.razorpayOrderId.startsWith('order_') ? undefined : initData.razorpayOrderId,
-          handler: function (response) {
-            handlePaymentVerification(
-              response.razorpay_payment_id,
-              response.razorpay_order_id || initData.razorpayOrderId,
-              response.razorpay_signature || 'test_signature'
-            );
-          },
-          prefill: {
-            name: formData.name,
-            email: formData.email || '',
-            contact: cleanPhone,
-          },
-          theme: {
-            color: '#f59e0b',
-          },
-          modal: {
-            ondismiss: function () {
-              setLoading(false);
-              setErrorMessage('Payment cancelled by user. Order was not placed.');
-            },
-          },
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (response) {
-          setLoading(false);
-          setErrorMessage(`Payment Failed: ${response.error?.description || 'Transaction declined'}`);
-        });
-        rzp.open();
       } else {
-        // Fallback simulator for offline/script blocked testing
-        console.warn('Razorpay SDK script not present in window, using backend test simulator');
-        const simPaymentId = 'pay_' + Math.random().toString(36).substring(2, 14);
-        const simSignature = 'simulated_valid_signature_' + Date.now();
-        await handlePaymentVerification(simPaymentId, initData.razorpayOrderId, simSignature);
+        setErrorMessage(data?.message || 'Order creation failed. Please try again.');
+        setShowConfirmationModal(false);
       }
     } catch (err) {
-      console.error('Razorpay process error:', err);
-      setErrorMessage(`Online Payment Error (${err.message}).`);
+      console.error('Order creation error:', err);
+      setErrorMessage(`Connection Error (${err.message}). Make sure backend server is running.`);
+      setShowConfirmationModal(false);
+    } finally {
       setLoading(false);
     }
   };
 
+  const handleSubmitForm = (e) => {
+    e.preventDefault();
+    if (paymentMethod === 'UPI') {
+      if (!userConfirmedPayment) {
+        handleInitiateUpiConfirmation(e);
+      } else {
+        executeOrderSubmission();
+      }
+    } else {
+      executeOrderSubmission();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
-      <div className="relative w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-fadeIn">
+      <div className="relative w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 flex flex-col max-h-[94vh]">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/70">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/70 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl text-zinc-950 font-bold shadow-md shadow-amber-500/20">
               <Truck className="w-5 h-5" />
@@ -260,9 +195,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         </div>
 
         {/* Form Body */}
-        <div className="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="p-4 sm:p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
           
-          {/* Left Column: Shipping Address Form */}
+          {/* Left Column: Shipping Address Form & Payment Method */}
           <div className="lg:col-span-7 space-y-5">
             {errorMessage && (
               <div className="flex items-start gap-3 p-3.5 bg-red-950/70 border border-red-800/80 rounded-2xl text-red-300 text-xs animate-shake">
@@ -271,7 +206,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               </div>
             )}
 
-            <form id="checkout-form" onSubmit={handleSubmitOrder} className="space-y-4">
+            <form id="checkout-form" onSubmit={handleSubmitForm} className="space-y-4">
               <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-zinc-800 pb-2">
                 <MapPin className="w-4 h-4" /> 1. Shipping Address Information
               </h4>
@@ -367,13 +302,40 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               {/* Payment Method Selector */}
               <div className="space-y-3 pt-2">
                 <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-zinc-800 pb-2">
-                  <ShieldCheck className="w-4 h-4" /> 2. Payment Method Selection
+                  <ShieldCheck className="w-4 h-4" /> 2. Select Payment Method
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Option 1: Cash on Delivery */}
+                  {/* Option 1: Online Payment (UPI) */}
                   <label
-                    className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-center gap-3 ${
+                    className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-start gap-3 ${
+                      paymentMethod === 'UPI'
+                        ? 'bg-amber-500/10 border-amber-500 text-white shadow-md shadow-amber-500/10'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="payment"
+                      value="UPI"
+                      checked={paymentMethod === 'UPI'}
+                      onChange={() => setPaymentMethod('UPI')}
+                      className="accent-amber-500 w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <div className="text-xs font-extrabold text-white flex items-center gap-1.5 flex-wrap">
+                        Online Payment (UPI)
+                        <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold uppercase">
+                          Paytm QR
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-1">Scan Paytm QR using GPay, PhonePe, Paytm, or any UPI app</p>
+                    </div>
+                  </label>
+
+                  {/* Option 2: Cash on Delivery */}
+                  <label
+                    className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-start gap-3 ${
                       paymentMethod === 'COD'
                         ? 'bg-amber-500/10 border-amber-500 text-white shadow-md'
                         : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
@@ -385,51 +347,94 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                       value="COD"
                       checked={paymentMethod === 'COD'}
                       onChange={() => setPaymentMethod('COD')}
-                      className="accent-amber-500 w-4 h-4"
+                      className="accent-amber-500 w-4 h-4 mt-0.5"
                     />
                     <div>
-                      <div className="text-xs font-extrabold text-white flex items-center gap-1.5">
+                      <div className="text-xs font-extrabold text-white flex items-center gap-1.5 flex-wrap">
                         Cash on Delivery (COD)
-                        <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                        <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold uppercase">
                           Pay on Delivery
                         </span>
                       </div>
-                      <p className="text-[11px] text-zinc-400 mt-0.5">Pay cash when shoes arrive at doorstep</p>
-                    </div>
-                  </label>
-
-                  {/* Option 2: Razorpay Online Payment */}
-                  <label
-                    className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-center gap-3 ${
-                      paymentMethod === 'Online Payment'
-                        ? 'bg-amber-500/10 border-amber-500 text-white shadow-md'
-                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="payment"
-                      value="Online Payment"
-                      checked={paymentMethod === 'Online Payment'}
-                      onChange={() => setPaymentMethod('Online Payment')}
-                      className="accent-amber-500 w-4 h-4"
-                    />
-                    <div>
-                      <div className="text-xs font-extrabold text-white flex items-center gap-1.5">
-                        Online Payment (Razorpay)
-                        <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold uppercase">
-                          Instant Paid
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-zinc-400 mt-0.5">UPI (GPay/PhonePe), Credit/Debit Cards, NetBanking</p>
+                      <p className="text-[11px] text-zinc-400 mt-1">Pay cash when shoes arrive at your doorstep</p>
                     </div>
                   </label>
                 </div>
               </div>
             </form>
+
+            {/* ── PAYTM UPI QR CODE SECTION (Renders when paymentMethod === 'UPI') ── */}
+            {paymentMethod === 'UPI' && (
+              <div className="p-4 sm:p-5 bg-zinc-950 border border-amber-500/30 rounded-2xl space-y-4 animate-fadeIn">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <QrCode className="w-5 h-5 text-amber-400" />
+                    <h5 className="font-extrabold text-white text-xs uppercase tracking-wider">
+                      Paytm UPI Payment QR Code
+                    </h5>
+                  </div>
+                  <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded font-bold">
+                    Scan &amp; Pay
+                  </span>
+                </div>
+
+                {/* QR Code Display & Dynamic Grand Total */}
+                <div className="flex flex-col sm:flex-row items-center gap-5 justify-center">
+                  <div className="relative group shrink-0">
+                    <img
+                      src="/assets/paytm-qr.png"
+                      alt="Paytm UPI QR Code"
+                      className="w-52 h-52 sm:w-60 sm:h-60 rounded-2xl border-2 border-amber-500/50 shadow-2xl object-contain bg-white p-1"
+                    />
+                  </div>
+
+                  <div className="space-y-3 text-center sm:text-left max-w-xs">
+                    <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-1">
+                      <span className="text-[10px] text-zinc-400 uppercase font-bold block">Exact Amount to Pay:</span>
+                      <div className="text-2xl font-mono font-black text-amber-400">
+                        ₹{grandTotal}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-xs">
+                      <span className="text-zinc-400 text-[11px] block font-semibold">Scan QR using any UPI app:</span>
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
+                        <span className="bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-[10px] font-bold text-blue-400">
+                          Google Pay
+                        </span>
+                        <span className="bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-[10px] font-bold text-purple-400">
+                          PhonePe
+                        </span>
+                        <span className="bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-[10px] font-bold text-cyan-400">
+                          Paytm
+                        </span>
+                        <span className="bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-[10px] font-bold text-emerald-400">
+                          BHIM UPI
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Completion Action */}
+                <div className="pt-2 border-t border-zinc-800/80 flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleInitiateUpiConfirmation}
+                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>I Have Completed Payment</span>
+                  </button>
+                  <p className="text-[10px] text-zinc-400 text-center">
+                    Click after scanning &amp; transferring ₹{grandTotal} via your UPI app
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Right Column: Order Summary & Place Order Button */}
+          {/* Right Column: Order Summary & Action Buttons */}
           <div className="lg:col-span-5 bg-zinc-950/70 border border-zinc-800 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
             <div className="space-y-4">
               <h4 className="text-xs font-extrabold text-white uppercase tracking-wider border-b border-zinc-800 pb-2">
@@ -484,12 +489,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 {loading ? (
                   <>
                     <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span>{paymentMethod === 'Online Payment' ? 'INITIALIZING RAZORPAY...' : 'PLACING ORDER...'}</span>
+                    <span>PLACING ORDER...</span>
                   </>
-                ) : paymentMethod === 'Online Payment' ? (
+                ) : paymentMethod === 'UPI' ? (
                   <>
-                    <CreditCard className="w-5 h-5" />
-                    <span>PAY ₹{grandTotal} VIA RAZORPAY</span>
+                    <QrCode className="w-5 h-5" />
+                    <span>PLACE ORDER (ONLINE PAYMENT)</span>
                   </>
                 ) : (
                   <>
@@ -501,7 +506,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
               <div className="flex items-center justify-center gap-2 text-[11px] text-zinc-500">
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span>SSL 256-bit Secured &amp; HMAC Verified Checkout</span>
+                <span>SSL Secured Checkout &amp; Manual Verification</span>
               </div>
             </div>
 
@@ -510,6 +515,87 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         </div>
 
       </div>
+
+      {/* ─── UPI PAYMENT CONFIRMATION WARNING MODAL ───────────────────────── */}
+      {showConfirmationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="relative w-full max-w-md bg-zinc-900 border border-amber-500/40 rounded-3xl shadow-2xl p-6 text-zinc-100 space-y-5 text-center">
+            
+            <div className="w-16 h-16 bg-amber-500/20 border border-amber-500/50 rounded-full flex items-center justify-center mx-auto text-amber-400 shadow-lg shadow-amber-500/20">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-black text-white">
+                Confirm UPI Payment Completion
+              </h3>
+              <div className="p-3 bg-red-950/60 border border-red-800/80 rounded-xl text-red-300 text-xs font-semibold leading-relaxed">
+                ⚠️ Please make sure you have completed the UPI payment before placing the order.
+              </div>
+            </div>
+
+            <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-left space-y-2 text-xs">
+              <div className="flex justify-between text-zinc-400">
+                <span>Grand Total Amount:</span>
+                <span className="font-mono font-black text-amber-400 text-sm">₹{grandTotal}</span>
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>Payment Method:</span>
+                <span className="font-bold text-white">Paytm UPI QR Code</span>
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>Payment Status after order:</span>
+                <span className="font-bold text-amber-300 bg-amber-950 border border-amber-800 px-2 py-0.5 rounded text-[10px]">
+                  Pending Verification
+                </span>
+              </div>
+            </div>
+
+            {/* Confirmation Checkbox */}
+            <label className="flex items-start gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded-xl cursor-pointer text-left">
+              <input
+                type="checkbox"
+                checked={userConfirmedPayment}
+                onChange={(e) => setUserConfirmedPayment(e.target.checked)}
+                className="accent-amber-500 w-4 h-4 mt-0.5 shrink-0"
+              />
+              <span className="text-xs text-zinc-300 leading-snug">
+                I confirm that I have scanned the Paytm QR code and transferred <strong>₹{grandTotal}</strong> using my UPI app.
+              </span>
+            </label>
+
+            {/* Modal Actions */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setUserConfirmedPayment(true);
+                  executeOrderSubmission();
+                }}
+                disabled={loading}
+                className="py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5"
+              >
+                {loading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>PLACE ORDER (ONLINE PAYMENT)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowConfirmationModal(false)}
+                className="py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors border border-zinc-700"
+              >
+                Cancel / Check QR
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
