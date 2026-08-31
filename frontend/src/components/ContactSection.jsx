@@ -83,7 +83,7 @@ export default function ContactSection() {
     } catch (err) {
       console.error('[ContactForm] Error submitting inquiry:', err);
       setErrorMsg(`Connection Error (${err.message}). Make sure backend server is running.`);
-    } fontally: {
+    } finally {
       setIsLoading(false);
     }
   };
