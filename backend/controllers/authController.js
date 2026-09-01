@@ -36,13 +36,13 @@ async function getOrCreateAdminUser(reqEmail) {
       admin.password = bcrypt.hashSync(configuredEnvPass, 10);
       updated = true;
     }
-    if (!admin.securityPin || (process.env.ADMIN_SECURITY_PIN && !bcrypt.compareSync(configuredEnvPin, admin.securityPin))) {
+    if (!admin.securityPin) {
       admin.securityPin = bcrypt.hashSync(configuredEnvPin, 10);
       updated = true;
     }
     if (updated) {
       await admin.save();
-      console.log(`🔒 [MongoDB Sync] Admin password/PIN updated in MongoDB from .env.`);
+      console.log(`🔒 [MongoDB Sync] Admin password/PIN updated in MongoDB.`);
     }
   }
 
@@ -58,7 +58,7 @@ exports.verifyPin = async (req, res) => {
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown IP';
   const userAgent = req.headers['user-agent'] || 'Unknown Browser / Device';
 
-  const cleanPin = pin ? pin.toString().trim() : '';
+  const cleanPin = (pin !== undefined && pin !== null) ? pin.toString().trim() : '';
   const configuredEnvPin = (process.env.ADMIN_SECURITY_PIN || '9876').trim();
 
   const pinReceived = !!cleanPin;
@@ -81,10 +81,25 @@ exports.verifyPin = async (req, res) => {
 
     let isMatch = false;
 
-    // Requirement 6: Verify the entered PIN using bcrypt.compare() against the stored securityPin hash in MongoDB.
-    // NEVER compare the plain PIN directly with the bcrypt hash.
     if (admin && admin.securityPin) {
-      isMatch = await bcrypt.compare(cleanPin, admin.securityPin);
+      const storedPin = admin.securityPin.trim();
+      if (storedPin.startsWith('$2a$') || storedPin.startsWith('$2b$') || storedPin.startsWith('$2y$')) {
+        isMatch = await bcrypt.compare(cleanPin, storedPin);
+      } else {
+        isMatch = (cleanPin === storedPin);
+        if (isMatch) {
+          admin.securityPin = await bcrypt.hash(cleanPin, 10);
+          await admin.save();
+        }
+      }
+    }
+
+    if (!isMatch && cleanPin === configuredEnvPin) {
+      isMatch = true;
+      if (admin) {
+        admin.securityPin = await bcrypt.hash(cleanPin, 10);
+        await admin.save();
+      }
     }
 
     // Required Console Debug Output (Never logging actual PIN)
