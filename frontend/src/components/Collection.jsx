@@ -3,6 +3,145 @@ import { ShoppingBag, Eye, Star, MessageCircle, Phone, RefreshCw, Zap } from 'lu
 import { getApiUrl } from '../config/api';
 import { useCart } from '../context/CartContext';
 
+const DEFAULT_PRODUCTS = [
+  {
+    _id: 'prod-001',
+    productId: 'LK-SP-001',
+    name: 'Air Max Pro Sport Shoes',
+    brand: 'LITRA KING',
+    category: 'Sports Shoes',
+    description: 'High performance athletic shoes with ultra-grip cushioning, breathable mesh, and flexible soles for workouts, running, and active wear.',
+    price: 1499,
+    originalPrice: 2499,
+    images: ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80'],
+    sizes: [6, 7, 8, 9, 10],
+    colors: ['Red', 'Black', 'White'],
+    stock: 20,
+    rating: 4.9,
+    tag: 'Top Rated',
+    isFeatured: true,
+  },
+  {
+    _id: 'prod-002',
+    productId: 'LK-SN-002',
+    name: 'Streetwear Urban Edition Sneakers',
+    brand: 'LITRA KING',
+    category: 'Sneakers',
+    description: 'Modern street style sneakers crafted with premium synthetic leather, lightweight shock-absorbing insoles, and trendy high-top finish.',
+    price: 1899,
+    originalPrice: 2999,
+    images: ['https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=800&q=80'],
+    sizes: [6, 7, 8, 9, 10],
+    colors: ['White/Black', 'Grey', 'Full Black'],
+    stock: 18,
+    rating: 4.8,
+    tag: 'Best Wholesale Seller',
+    isFeatured: true,
+  },
+  {
+    _id: 'prod-003',
+    productId: 'LK-CS-003',
+    name: 'Comfort Soft Casual Loafers',
+    brand: 'LITRA KING',
+    category: 'Casual Shoes',
+    description: 'Ultra lightweight daily casual walk shoes designed for effortless slip-on comfort, all-day cushioning, and casual office or outing wear.',
+    price: 1299,
+    originalPrice: 1999,
+    images: ['https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?auto=format&fit=crop&w=800&q=80'],
+    sizes: [7, 8, 9, 10],
+    colors: ['Brown', 'Tan', 'Navy Blue'],
+    stock: 25,
+    rating: 4.7,
+    tag: 'Wholesale Favorite',
+    isFeatured: true,
+  },
+  {
+    _id: 'prod-004',
+    productId: 'LK-RN-004',
+    name: 'FlyRunner Cushion Marathon Shoes',
+    brand: 'LITRA KING',
+    category: 'Running Shoes',
+    description: 'Professional marathon running footwear featuring energy-returning foam midsole, arch support, and anti-slip rubber outsole.',
+    price: 1699,
+    originalPrice: 2799,
+    images: ['https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?auto=format&fit=crop&w=800&q=80'],
+    sizes: [6, 7, 8, 9, 10],
+    colors: ['Neon Green', 'Blue', 'Black'],
+    stock: 15,
+    rating: 4.9,
+    tag: 'Pro Runner Choice',
+    isFeatured: true,
+  },
+  {
+    _id: 'prod-005',
+    productId: 'LK-FM-005',
+    name: 'Royal Heritage Leather Formal Shoes',
+    brand: 'LITRA KING',
+    category: 'Formal Shoes',
+    description: 'Classic Oxford handcrafted formal shoes with sleek gloss finish, cushioned heel padding, and timeless wedding/office elegance.',
+    price: 2199,
+    originalPrice: 3499,
+    images: ['https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?auto=format&fit=crop&w=800&q=80'],
+    sizes: [6, 7, 8, 9, 10],
+    colors: ['Black', 'Dark Brown'],
+    stock: 12,
+    rating: 4.8,
+    tag: 'Premium Leather',
+    isFeatured: true,
+  },
+  {
+    _id: 'prod-006',
+    productId: 'LK-SL-006',
+    name: 'UltraSoft Ortho Cushion Slippers',
+    brand: 'LITRA KING',
+    category: 'Slippers',
+    description: 'Orthopedic memory foam slides and slippers designed for home comfort, anti-skid bathroom safety, and daily indoor relaxing.',
+    price: 599,
+    originalPrice: 999,
+    images: ['https://images.unsplash.com/photo-1603808033192-082d6919d3e1?auto=format&fit=crop&w=800&q=80'],
+    sizes: [6, 7, 8, 9, 10],
+    colors: ['Grey', 'Black', 'Blue'],
+    stock: 30,
+    rating: 4.6,
+    tag: 'Daily Comfort',
+    isFeatured: false,
+  },
+  {
+    _id: 'prod-007',
+    productId: 'LK-SD-007',
+    name: 'Sturdy Outdoor Leather Strap Sandals',
+    brand: 'LITRA KING',
+    category: 'Sandals',
+    description: 'Rugged outdoor casual sandals with adjustable velcro straps, reinforced toe bumpers, and weather-resistant flexible soles.',
+    price: 999,
+    originalPrice: 1599,
+    images: ['https://images.unsplash.com/photo-1607522370275-f14206abe5d3?auto=format&fit=crop&w=800&q=80'],
+    sizes: [7, 8, 9, 10],
+    colors: ['Brown', 'Camel', 'Black'],
+    stock: 22,
+    rating: 4.7,
+    tag: 'All Terrain',
+    isFeatured: false,
+  },
+  {
+    _id: 'prod-008',
+    productId: 'LK-KD-008',
+    name: 'Vibrant Light-Up Kids Sneakers',
+    brand: 'LITRA KING',
+    category: 'Kids Footwear',
+    description: 'Fun, safe, and flexible footwear for growing children featuring soft non-toxic padding, easy velcro enclosure, and durable rubber soles.',
+    price: 799,
+    originalPrice: 1299,
+    images: ['https://images.unsplash.com/photo-1514989940723-e8e51635b782?auto=format&fit=crop&w=800&q=80'],
+    sizes: [1, 2, 3, 4, 5],
+    colors: ['Red/Yellow', 'Blue/White'],
+    stock: 16,
+    rating: 4.9,
+    tag: 'Kids Special',
+    isFeatured: false,
+  },
+];
+
 export default function Collection({ onProductSelect }) {
   const { addToCart } = useCart();
 
@@ -33,13 +172,20 @@ export default function Collection({ onProductSelect }) {
       const res = await fetch(url);
       const data = await res.json().catch(() => null);
 
-      if (res.ok && data && Array.isArray(data.products)) {
+      if (res.ok && data && Array.isArray(data.products) && data.products.length > 0) {
         setProducts(data.products);
       } else {
-        setProducts([]);
+        const filtered = activeCategory === 'All'
+          ? DEFAULT_PRODUCTS
+          : DEFAULT_PRODUCTS.filter(p => p.category === activeCategory);
+        setProducts(filtered);
       }
     } catch (err) {
       console.error('Error fetching products:', err);
+      const filtered = activeCategory === 'All'
+        ? DEFAULT_PRODUCTS
+        : DEFAULT_PRODUCTS.filter(p => p.category === activeCategory);
+      setProducts(filtered);
     } finally {
       setLoading(false);
     }
