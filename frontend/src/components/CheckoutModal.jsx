@@ -384,7 +384,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                     <img
                       src="/assets/paytm-qr.png"
                       alt="Paytm UPI QR Code"
-                      className="w-52 h-52 sm:w-60 sm:h-60 rounded-2xl border-2 border-amber-500/50 shadow-2xl object-contain bg-white p-1"
+                      className="w-44 h-44 sm:w-60 sm:h-60 rounded-2xl border-2 border-amber-500/50 shadow-2xl object-contain bg-white p-1"
                     />
                   </div>
 
@@ -435,7 +435,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           </div>
 
           {/* Right Column: Order Summary & Action Buttons */}
-          <div className="lg:col-span-5 bg-zinc-950/70 border border-zinc-800 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+          <div className="lg:col-span-5 bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4 flex flex-col justify-between order-first lg:order-last">
             <div className="space-y-4">
               <h4 className="text-xs font-extrabold text-white uppercase tracking-wider border-b border-zinc-800 pb-2">
                 Order Summary ({cartItems.length} items)

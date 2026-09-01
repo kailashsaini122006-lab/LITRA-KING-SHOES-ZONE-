@@ -15,7 +15,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/80 backdrop-blur-sm animate-fadeIn">
       <div className="absolute inset-0" onClick={onClose} />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
         <div className="w-screen max-w-md bg-zinc-900 border-l border-zinc-800 shadow-2xl text-zinc-100 flex flex-col justify-between">
           
           {/* Header */}

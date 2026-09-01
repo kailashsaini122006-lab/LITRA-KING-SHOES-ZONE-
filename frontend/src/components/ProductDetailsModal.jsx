@@ -75,7 +75,7 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
           
           {/* Left Column: Image Viewer */}
           <div className="md:col-span-6 space-y-4">
-            <div className="relative h-72 sm:h-80 bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800 shadow-inner group">
+            <div className="relative h-52 sm:h-80 bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800 shadow-inner group">
               <img
                 src={selectedImage || imagesList[0]}
                 alt={product.name}
