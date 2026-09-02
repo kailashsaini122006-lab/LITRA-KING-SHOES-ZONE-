@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const { DEFAULT_PRODUCTS } = require('./productController');
 
 /**
  * Generate sequential Order ID (e.g. LK1001, LK1002, LK1003)
@@ -362,6 +363,13 @@ exports.createOrder = async (req, res) => {
         dbProduct = await Product.findOne({ productId: item.productId });
       }
 
+      if (!dbProduct && item.productId) {
+        const found = Array.isArray(DEFAULT_PRODUCTS) ? DEFAULT_PRODUCTS.find(p => p.productId === item.productId || p._id === item.productId) : null;
+        if (found) {
+          dbProduct = { ...found, stock: found.stock || 20 };
+        }
+      }
+
       if (!dbProduct) {
         return res.status(404).json({
           success: false,
@@ -420,9 +428,11 @@ exports.createOrder = async (req, res) => {
     });
 
     for (const update of stockUpdates) {
-      await Product.findByIdAndUpdate(update.productId, {
-        $set: { stock: update.newStock },
-      });
+      if (update.productId) {
+        await Product.findByIdAndUpdate(update.productId, {
+          $set: { stock: update.newStock },
+        });
+      }
     }
 
     console.log(`📦 [COD Order Created] Order #${orderId} saved in MongoDB | Total: ₹${grandTotal}`);

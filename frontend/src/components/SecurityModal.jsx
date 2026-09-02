@@ -7,10 +7,7 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
   const [viewState, setViewState] = useState('verify');
 
   // Input States
-  const [adminId, setAdminId] = useState('');
-  const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [maskedEmail, setMaskedEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [resetToken, setResetToken] = useState('');
@@ -25,10 +22,7 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
   useEffect(() => {
     if (isOpen) {
       setViewState('verify');
-      setAdminId('');
-      setPassword('');
       setPin('');
-      setShowPassword(false);
       setResetCode('');
       setResetToken('');
       setNewPin('');
@@ -90,16 +84,6 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!adminId.trim()) {
-      setErrorMessage('Please enter Admin ID');
-      return;
-    }
-
-    if (!password.trim()) {
-      setErrorMessage('Please enter Password');
-      return;
-    }
-
     if (!pin || pin.length !== 4) {
       setErrorMessage('Security PIN must be exactly 4 digits');
       return;
@@ -111,8 +95,6 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          adminId: adminId.trim(),
-          password: password.trim(),
           pin: pin.trim(),
         }),
       });
@@ -127,7 +109,7 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
           onAuthSuccess(data.accessToken);
         }, 500);
       } else {
-        const msg = data?.message || 'Invalid Admin ID, Password or Security PIN';
+        const msg = data?.message || 'Invalid Security PIN';
         setErrorMessage(msg);
       }
     } catch (err) {
@@ -266,8 +248,6 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
 
   const handleReturnToLogin = () => {
     setViewState('verify');
-    setAdminId('');
-    setPassword('');
     setPin('');
     setNewPin('');
     setConfirmPin('');
@@ -298,7 +278,7 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
                 {viewState === 'reset-success' && 'PIN RESET SUCCESSFUL'}
               </h3>
               <p className="text-xs text-zinc-400">
-                {viewState === 'verify' && 'Enter Admin Credentials & Security PIN to access Admin Portal'}
+                {viewState === 'verify' && 'Enter 4-digit Security PIN to access Admin Portal'}
                 {viewState === 'forgot-request' && 'Send 6-digit verification code to admin email'}
                 {viewState === 'verify-code' && 'Enter 6-digit code sent to your email'}
                 {viewState === 'create-new-pin' && 'Set your new 4-digit Security PIN'}
@@ -337,52 +317,11 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
 
           {/* VIEW 1: Main Admin Login Form */}
           {viewState === 'verify' && (
-            <form onSubmit={handleVerifyPin} className="space-y-4">
+            <form onSubmit={handleVerifyPin} className="space-y-5">
               
-              {/* Admin ID Field */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-amber-400" /> Admin ID *
-                </label>
-                <input
-                  type="text"
-                  value={adminId}
-                  onChange={(e) => { setAdminId(e.target.value); setErrorMessage(''); }}
-                  placeholder="Enter Admin ID"
-                  required
-                  autoFocus
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-xs font-bold focus:outline-none focus:border-amber-400 transition-colors"
-                />
-              </div>
-
-              {/* Password Field */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-amber-400" /> Password *
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); setErrorMessage(''); }}
-                    placeholder="Enter Password"
-                    required
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-11 py-3 text-white text-xs font-mono focus:outline-none focus:border-amber-400 transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white p-1 transition-colors"
-                    title={showPassword ? "Hide Password" : "Show Password"}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
               {/* Security PIN Field */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1 flex items-center gap-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5 flex items-center gap-1.5">
                   <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Security PIN * (4 Digits)
                 </label>
                 <input
@@ -394,11 +333,12 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
                   onChange={handlePinChange}
                   placeholder="• • • •"
                   required
-                  className="w-full bg-zinc-950 border-2 border-zinc-800 rounded-xl px-4 py-2.5 text-center text-xl font-mono font-black tracking-[0.5em] text-amber-400 placeholder-zinc-700 focus:outline-none focus:border-amber-400 transition-colors"
+                  autoFocus
+                  className="w-full bg-zinc-950 border-2 border-zinc-800 rounded-xl px-4 py-3 text-center text-xl font-mono font-black tracking-[0.5em] text-amber-400 placeholder-zinc-700 focus:outline-none focus:border-amber-400 transition-colors"
                 />
               </div>
 
-              {/* LOGIN / VERIFY Button */}
+              {/* LOGIN / VERIFY PIN Button */}
               <button
                 type="submit"
                 disabled={loading}
@@ -407,25 +347,17 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
                 {loading ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
-                    <span>AUTHENTICATING...</span>
+                    <span>VERIFYING...</span>
                   </>
                 ) : (
                   <>
-                    <Lock className="w-4 h-4 fill-zinc-950" />
-                    <span>🔐 LOGIN / VERIFY</span>
+                    <span>🔐 LOGIN / VERIFY PIN</span>
                   </>
                 )}
               </button>
 
-              {/* Forgot Links */}
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800/80">
-                <button
-                  type="button"
-                  onClick={handleOpenForgot}
-                  className="text-amber-400 hover:text-amber-300 hover:underline font-bold transition-colors"
-                >
-                  Forgot Password?
-                </button>
+              {/* Forgot Security PIN Link */}
+              <div className="flex items-center justify-center text-xs pt-3 border-t border-zinc-800/80">
                 <button
                   type="button"
                   onClick={handleOpenForgot}

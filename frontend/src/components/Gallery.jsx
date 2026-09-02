@@ -25,7 +25,7 @@ export default function Gallery() {
       id: 3,
       title: 'Sneaker & Sports Showcase',
       subtitle: 'Latest Trending Footwear Stock',
-      src: 'https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=1200&q=80',
+      src: '/assets/white-air-sneaker.png',
       badge: 'Products Showcase',
     },
     {

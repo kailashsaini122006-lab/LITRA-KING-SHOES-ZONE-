@@ -54,83 +54,23 @@ async function getOrCreateAdminUser(reqEmail) {
  * POST /api/auth/verify-pin
  */
 exports.verifyPin = async (req, res) => {
-  const { adminId, password, pin } = req.body;
+  const { pin } = req.body;
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown IP';
   const userAgent = req.headers['user-agent'] || 'Unknown Browser / Device';
 
-  const cleanId = (adminId !== undefined && adminId !== null) ? adminId.toString().trim() : '';
-  const cleanPass = (password !== undefined && password !== null) ? password.toString().trim() : '';
   const cleanPin = (pin !== undefined && pin !== null) ? pin.toString().trim() : '';
-
-  // 1. Mandatory Fields Check
-  if (adminId !== undefined || password !== undefined) {
-    if (!cleanId || !cleanPass) {
-      return res.status(400).json({
-        success: false,
-        message: 'Admin ID and Password are required',
-      });
-    }
-  }
 
   if (!cleanPin || cleanPin.length !== 4 || !/^\d{4}$/.test(cleanPin)) {
     return res.status(401).json({
       success: false,
-      message: 'Invalid Security PIN',
+      message: 'Security PIN must be exactly 4 digits',
     });
   }
 
   try {
     const admin = await getOrCreateAdminUser();
 
-    // 2. Verify Admin ID and Password
-    let isIdMatch = false;
-    let isPassMatch = false;
-
-    if (cleanId) {
-      const lowerId = cleanId.toLowerCase();
-      const adminEmail = (admin.email || '').toLowerCase();
-      const adminUsername = (admin.adminId || 'admin').toLowerCase();
-      const envEmail = (process.env.ADMIN_EMAIL || '').toLowerCase();
-      const envId = (process.env.ADMIN_ID || 'admin').toLowerCase();
-
-      if (lowerId === adminEmail || lowerId === adminUsername || lowerId === envEmail || lowerId === envId || lowerId === 'admin' || lowerId === 'kailash') {
-        isIdMatch = true;
-      }
-    } else {
-      isIdMatch = true; // Backward compatibility fallback
-    }
-
-    if (cleanPass) {
-      if (admin && admin.password) {
-        if (admin.password.startsWith('$2a$') || admin.password.startsWith('$2b$') || admin.password.startsWith('$2y$')) {
-          isPassMatch = await bcrypt.compare(cleanPass, admin.password);
-        } else {
-          isPassMatch = (cleanPass === admin.password);
-        }
-      }
-      const envPass = process.env.ADMIN_PASSWORD || 'litra123';
-      if (!isPassMatch && cleanPass === envPass) {
-        isPassMatch = true;
-      }
-    } else {
-      isPassMatch = true; // Backward compatibility fallback
-    }
-
-    if (!isIdMatch || !isPassMatch) {
-      await SecurityAttempt.create({
-        attemptType: 'WRONG_PASSWORD',
-        ipAddress,
-        userAgent,
-        message: `Failed Admin ID/Password attempt (${cleanId}) from IP (${ipAddress})`,
-      });
-
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid Admin ID or Password',
-      });
-    }
-
-    // 3. Verify Security PIN
+    // Verify Security PIN
     let isPinMatch = false;
     if (admin && admin.securityPin) {
       const storedPin = admin.securityPin.trim();
@@ -148,7 +88,7 @@ exports.verifyPin = async (req, res) => {
 
     if (!isPinMatch) {
       await SecurityAttempt.create({
-        attemptType: 'WRONG_PASSWORD',
+        attemptType: 'WRONG_PIN',
         ipAddress,
         userAgent,
         message: `Incorrect Security PIN attempt from IP (${ipAddress})`,

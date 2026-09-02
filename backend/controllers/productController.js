@@ -28,11 +28,10 @@ const DEFAULT_PRODUCTS = [
     brand: 'LITRA KING',
     category: 'Sneakers',
     description: 'Modern street style sneakers crafted with premium synthetic leather, lightweight shock-absorbing insoles, and trendy high-top finish.',
-    price: 1899,
-    originalPrice: 2999,
+    price: 850,
+    originalPrice: 2833,
     images: [
-      'https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1560769629-975ec94e6a86?auto=format&fit=crop&w=800&q=80',
+      '/assets/white-air-sneaker.png',
     ],
     sizes: [6, 7, 8, 9, 10],
     colors: ['White/Black', 'Grey', 'Full Black'],
@@ -160,6 +159,18 @@ async function seedProductsIfEmpty() {
     if (count === 0) {
       await Product.insertMany(DEFAULT_PRODUCTS);
       console.log('🛍️  [MongoDB Seed] Successfully auto-seeded initial Litra King Footwear Products collection!');
+    } else {
+      // Ensure product LK-SN-002 is updated if already seeded
+      await Product.updateOne(
+        { productId: 'LK-SN-002' },
+        {
+          $set: {
+            price: 850,
+            originalPrice: 2833,
+            images: ['/assets/white-air-sneaker.png']
+          }
+        }
+      );
     }
   } catch (err) {
     console.error('❌  [Product Seeding Error]:', err.message);
@@ -350,4 +361,12 @@ exports.deleteProduct = async (req, res) => {
   }
 };
 
-module.exports.seedProductsIfEmpty = seedProductsIfEmpty;
+module.exports = {
+  getProducts: exports.getProducts,
+  getProductById: exports.getProductById,
+  createProduct: exports.createProduct,
+  updateProduct: exports.updateProduct,
+  deleteProduct: exports.deleteProduct,
+  seedProductsIfEmpty,
+  DEFAULT_PRODUCTS,
+};
