@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, ShieldCheck, MapPin, Truck, AlertCircle, RefreshCw, Lock, Zap, QrCode, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle2, ShieldCheck, MapPin, Truck, AlertCircle, RefreshCw, Lock, Zap, QrCode, Smartphone, CheckSquare, Square, AlertTriangle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { getApiUrl } from '../config/api';
+import paytmQrAsset from '../assets/paytm_qr.jpg';
 
 const INITIAL_FORM = {
   name: '',
@@ -171,7 +172,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-fadeIn">
       <div className="relative w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 flex flex-col max-h-[94vh]">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/70 shrink-0">
           <div className="flex items-center gap-3">
@@ -196,7 +197,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
         {/* Form Body */}
         <div className="p-4 sm:p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
-          
+
           {/* Left Column: Shipping Address Form & Payment Method */}
           <div className="lg:col-span-7 space-y-5">
             {errorMessage && (
@@ -308,11 +309,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Option 1: Online Payment (UPI) */}
                   <label
-                    className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-start gap-3 ${
-                      paymentMethod === 'UPI'
-                        ? 'bg-amber-500/10 border-amber-500 text-white shadow-md shadow-amber-500/10'
-                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
-                    }`}
+                    className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-start gap-3 ${paymentMethod === 'UPI'
+                      ? 'bg-amber-500/10 border-amber-500 text-white shadow-md shadow-amber-500/10'
+                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                      }`}
                   >
                     <input
                       type="radio"
@@ -335,11 +335,10 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
                   {/* Option 2: Cash on Delivery */}
                   <label
-                    className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-start gap-3 ${
-                      paymentMethod === 'COD'
-                        ? 'bg-amber-500/10 border-amber-500 text-white shadow-md'
-                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
-                    }`}
+                    className={`p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-start gap-3 ${paymentMethod === 'COD'
+                      ? 'bg-amber-500/10 border-amber-500 text-white shadow-md'
+                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                      }`}
                   >
                     <input
                       type="radio"
@@ -380,11 +379,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
                 {/* QR Code Display & Dynamic Grand Total */}
                 <div className="flex flex-col sm:flex-row items-center gap-5 justify-center">
-                  <div className="relative group shrink-0">
+                  <div className="relative group">
                     <img
-                      src="/assets/paytm-qr.png"
+                      src={paytmQrAsset}
                       alt="Paytm UPI QR Code"
-                      className="w-44 h-44 sm:w-60 sm:h-60 rounded-2xl border-2 border-amber-500/50 shadow-2xl object-contain bg-white p-1"
+                      className="w-52 h-52 sm:w-56 sm:h-56 rounded-2xl border-2 border-amber-500/50 shadow-2xl object-cover bg-white p-1"
                     />
                   </div>
 
@@ -435,7 +434,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           </div>
 
           {/* Right Column: Order Summary & Action Buttons */}
-          <div className="lg:col-span-5 bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4 flex flex-col justify-between order-first lg:order-last">
+          <div className="lg:col-span-5 bg-zinc-950/70 border border-zinc-800 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
             <div className="space-y-4">
               <h4 className="text-xs font-extrabold text-white uppercase tracking-wider border-b border-zinc-800 pb-2">
                 Order Summary ({cartItems.length} items)
@@ -520,7 +519,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       {showConfirmationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fadeIn">
           <div className="relative w-full max-w-md bg-zinc-900 border border-amber-500/40 rounded-3xl shadow-2xl p-6 text-zinc-100 space-y-5 text-center">
-            
+
             <div className="w-16 h-16 bg-amber-500/20 border border-amber-500/50 rounded-full flex items-center justify-center mx-auto text-amber-400 shadow-lg shadow-amber-500/20">
               <AlertTriangle className="w-8 h-8" />
             </div>
