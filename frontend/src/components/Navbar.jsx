@@ -94,16 +94,6 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
             )}
           </button>
 
-          {/* Data Add / Admin PIN Button */}
-          <button
-            onClick={onDataAddClick}
-            className="hidden md:flex items-center gap-1.5 bg-zinc-900 border border-amber-500/50 hover:bg-amber-500/20 text-amber-400 px-3.5 py-2 rounded-full font-extrabold text-xs shadow-md transition-all hover:scale-105"
-            title="Admin Portal"
-          >
-            <Lock className="w-3.5 h-3.5 text-amber-400" />
-            <span>Admin</span>
-          </button>
-
           {/* Call Hotline Button */}
           <a
             href="tel:9257575393"
@@ -140,27 +130,16 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-1">
+          <div className="pt-1">
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
                 onOpenTracking();
               }}
-              className="flex items-center justify-center gap-1.5 bg-amber-500/10 border border-amber-500/40 text-amber-400 py-3 rounded-xl font-bold text-xs"
+              className="w-full flex items-center justify-center gap-1.5 bg-amber-500/10 border border-amber-500/40 text-amber-400 py-3 rounded-xl font-bold text-xs"
             >
               <PackageCheck className="w-4 h-4" />
               <span>Track Order</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onDataAddClick();
-              }}
-              className="flex items-center justify-center gap-1.5 bg-zinc-900 border border-zinc-800 text-zinc-300 py-3 rounded-xl font-bold text-xs"
-            >
-              <Lock className="w-4 h-4 text-amber-400" />
-              <span>Admin Portal</span>
             </button>
           </div>
         </div>

@@ -41,13 +41,21 @@ export default function App() {
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
 
   useEffect(() => {
-    // URL Hash listener (#track or #cart or #register)
+    // Direct URL Path & Hash listener (/admin, #track, #cart, etc.)
     const checkDirectUrlRoute = () => {
-      const hash = window.location.hash;
       const pathname = window.location.pathname;
+      const hash = window.location.hash;
 
-      if (hash === '#register' || hash === '#data-add' || pathname.includes('/register')) {
-        handleDataAddClick();
+      if (pathname.includes('/admin') || hash === '#admin' || hash === '#register' || hash === '#data-add' || pathname.includes('/register')) {
+        const savedToken = sessionStorage.getItem('lk_access_token');
+        if (savedToken) {
+          setAccessToken(savedToken);
+          setIsDataEntryOpen(true);
+          setIsSecurityOpen(false);
+        } else {
+          setIsDataEntryOpen(false);
+          setIsSecurityOpen(true);
+        }
       } else if (hash === '#track' || pathname.includes('/track')) {
         handleOpenTracking();
       } else if (hash === '#cart' || pathname.includes('/cart')) {
@@ -56,13 +64,27 @@ export default function App() {
     };
 
     checkDirectUrlRoute();
+    window.addEventListener('popstate', checkDirectUrlRoute);
     window.addEventListener('hashchange', checkDirectUrlRoute);
-    return () => window.removeEventListener('hashchange', checkDirectUrlRoute);
+    return () => {
+      window.removeEventListener('popstate', checkDirectUrlRoute);
+      window.removeEventListener('hashchange', checkDirectUrlRoute);
+    };
   }, []);
 
   const handleDataAddClick = () => {
-    setIsDataEntryOpen(false);
-    setIsSecurityOpen(true);
+    const savedToken = sessionStorage.getItem('lk_access_token');
+    if (savedToken) {
+      setAccessToken(savedToken);
+      setIsDataEntryOpen(true);
+      setIsSecurityOpen(false);
+    } else {
+      setIsDataEntryOpen(false);
+      setIsSecurityOpen(true);
+    }
+    if (window.location.pathname !== '/admin') {
+      window.history.pushState(null, '', '/admin');
+    }
   };
 
   const handleAuthSuccess = (token) => {
@@ -70,6 +92,9 @@ export default function App() {
     sessionStorage.setItem('lk_access_token', token);
     setIsSecurityOpen(false);
     setIsDataEntryOpen(true);
+    if (window.location.pathname !== '/admin') {
+      window.history.pushState(null, '', '/admin');
+    }
   };
 
   const handleOpenTracking = (orderId = '') => {
@@ -90,7 +115,6 @@ export default function App() {
       >
         {/* Header Navigation */}
         <Navbar
-          onDataAddClick={handleDataAddClick}
           onOpenCart={() => setIsCartOpen(true)}
           onOpenTracking={() => handleOpenTracking('')}
         />
@@ -160,7 +184,12 @@ export default function App() {
         {/* 4-Digit Security PIN & Forgot PIN Modal */}
         <SecurityModal
           isOpen={isSecurityOpen}
-          onClose={() => setIsSecurityOpen(false)}
+          onClose={() => {
+            setIsSecurityOpen(false);
+            if (window.location.pathname.includes('/admin')) {
+              window.history.pushState(null, '', '/');
+            }
+          }}
           onAuthSuccess={handleAuthSuccess}
         />
 
@@ -171,6 +200,9 @@ export default function App() {
             setIsDataEntryOpen(false);
             setAccessToken('');
             sessionStorage.removeItem('lk_access_token');
+            if (window.location.pathname.includes('/admin')) {
+              window.history.pushState(null, '', '/');
+            }
           }}
           accessToken={accessToken}
         />
