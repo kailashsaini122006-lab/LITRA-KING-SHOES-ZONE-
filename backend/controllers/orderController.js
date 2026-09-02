@@ -613,30 +613,50 @@ exports.updateOrderStatus = async (req, res) => {
 exports.deleteOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    let order = await Order.findOneAndDelete({ orderId: id.toUpperCase() });
 
-    if (!order && id.match(/^[0-9a-fA-F]{24}$/)) {
-      order = await Order.findByIdAndDelete(id);
+    if (!id || !id.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID parameter is required.',
+      });
     }
+
+    const cleanId = id.trim().replace(/^#/, '');
+
+    // Construct multi-criteria query to guarantee permanent MongoDB deletion by orderId or _id
+    const deleteCriteria = [
+      { orderId: cleanId },
+      { orderId: cleanId.toUpperCase() },
+      { orderId: cleanId.toLowerCase() },
+      { orderId: { $regex: `^${cleanId}$`, $options: 'i' } },
+    ];
+
+    if (cleanId.match(/^[0-9a-fA-F]{24}$/)) {
+      deleteCriteria.push({ _id: cleanId });
+    }
+
+    const order = await Order.findOneAndDelete({ $or: deleteCriteria });
 
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found',
+        message: `Order "${id}" not found in MongoDB database.`,
       });
     }
 
-    console.log(`🗑️  [Admin Delete] Order #${id} deleted from database`);
+    console.log(`🗑️  [MongoDB Permanent Delete] Order #${order.orderId} (ID: ${order._id}) permanently removed from MongoDB.`);
 
-    return res.json({
+    return res.status(200).json({
       success: true,
-      message: `Order #${id} deleted successfully.`,
+      message: `Order #${order.orderId} permanently deleted from database.`,
+      orderId: order.orderId,
+      id: order._id,
     });
   } catch (err) {
-    console.error('Error deleting order:', err.message);
+    console.error('Error permanently deleting order from MongoDB:', err.message);
     return res.status(500).json({
       success: false,
-      message: 'Failed to delete order: ' + err.message,
+      message: 'Failed to delete order from database: ' + err.message,
     });
   }
 };

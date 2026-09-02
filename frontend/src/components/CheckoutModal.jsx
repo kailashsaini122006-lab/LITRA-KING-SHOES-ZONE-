@@ -22,6 +22,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Location (GPS) State
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationSuccess, setLocationSuccess] = useState('');
+  const [locationError, setLocationError] = useState('');
+  const [locationCoords, setLocationCoords] = useState(null);
+
   // UPI Specific State
   const [hasClickedCompletedPayment, setHasClickedCompletedPayment] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
@@ -74,6 +80,35 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     return true;
   };
 
+  // Handle Browser Geolocation API
+  const handleGetCurrentLocation = () => {
+    setLocationError('');
+    setLocationSuccess('');
+
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser. Please enter your address manually.');
+      return;
+    }
+
+    setLocationLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setLocationCoords({ lat, lng });
+        setLocationSuccess(`Location detected successfully (${lat}, ${lng})`);
+        setLocationLoading(false);
+      },
+      (err) => {
+        console.warn('Geolocation error:', err.message);
+        setLocationError('Location permission was denied. Please enter your address manually.');
+        setLocationLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
   // Triggered when customer clicks "I Have Completed Payment" or submits form
   const handleInitiateUpiConfirmation = (e) => {
     if (e) e.preventDefault();
@@ -99,11 +134,15 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     const cleanPhone = formData.phone.toString().trim().replace(/\D/g, '');
     const cleanPincode = formData.pincode.toString().trim().replace(/\D/g, '');
 
+    const finalAddress = locationCoords
+      ? `${formData.address.trim()} (GPS Location: ${locationCoords.lat}, ${locationCoords.lng})`
+      : formData.address.trim();
+
     const payloadCustomer = {
       name: formData.name.trim(),
       phone: cleanPhone,
-      email: formData.email.trim(),
-      address: formData.address.trim(),
+      email: (formData.email || '').trim(),
+      address: finalAddress,
       city: formData.city.trim(),
       state: formData.state.trim() || 'Rajasthan',
       pincode: cleanPincode,
@@ -136,6 +175,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       if (res.ok && data && data.success) {
         clearCart();
         setFormData(INITIAL_FORM);
+        setLocationCoords(null);
+        setLocationSuccess('');
+        setLocationError('');
         setShowConfirmationModal(false);
         setHasClickedCompletedPayment(false);
         setUserConfirmedPayment(false);
@@ -239,17 +281,6 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-300 mb-1">Email Address (Optional)</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleFormChange('email', e.target.value)}
-                  placeholder="yourname@gmail.com"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-amber-400 transition-colors"
-                />
-              </div>
-
-              <div>
                 <label className="block text-xs font-bold text-zinc-300 mb-1">House / Shop / Street Address *</label>
                 <textarea
                   rows="2"
@@ -298,6 +329,49 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-xs font-mono focus:outline-none focus:border-amber-400 transition-colors"
                   />
                 </div>
+              </div>
+
+              {/* Location Option (GPS) */}
+              <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-red-500" /> Location (GPS)
+                  </label>
+                  <span className="text-xs text-zinc-400 font-semibold">Optional</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={locationLoading}
+                  className="w-full py-3 px-4 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-amber-400 font-extrabold text-xs rounded-xl transition-all border border-zinc-800 flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                >
+                  {locationLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                      <span>Detecting Current Location...</span>
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="w-4 h-4 text-red-500" />
+                      <span>Use My Current Location</span>
+                    </>
+                  )}
+                </button>
+
+                {locationSuccess && (
+                  <div className="p-3 bg-emerald-950/70 border border-emerald-800/80 rounded-xl text-emerald-300 text-xs font-semibold flex items-start sm:items-center gap-2 animate-fadeIn shadow-sm leading-relaxed break-all">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5 sm:mt-0" />
+                    <span>{locationSuccess}</span>
+                  </div>
+                )}
+
+                {locationError && (
+                  <div className="p-3 bg-red-950/70 border border-red-800/80 rounded-xl text-red-300 text-xs font-semibold flex items-start sm:items-center gap-2 animate-fadeIn leading-relaxed">
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5 sm:mt-0" />
+                    <span>{locationError}</span>
+                  </div>
+                )}
               </div>
 
               {/* Payment Method Selector */}

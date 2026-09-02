@@ -188,28 +188,7 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
                 </div>
               </div>
 
-              {/* Color Selector */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  Select Color Variant *
-                </label>
-                <div className="flex flex-wrap gap-2.5">
-                  {colorsList.map((clr) => (
-                    <button
-                      key={clr}
-                      type="button"
-                      onClick={() => setSelectedColor(clr)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
-                        selectedColor === clr
-                          ? 'bg-amber-500/20 text-amber-300 border-amber-500'
-                          : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
-                      }`}
-                    >
-                      {clr}
-                    </button>
-                  ))}
-                </div>
-              </div>
+
 
               {/* Quantity Selector */}
               <div className="flex items-center gap-4 pt-1">

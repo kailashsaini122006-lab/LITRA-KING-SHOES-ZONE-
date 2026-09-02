@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { List, X, RefreshCw, ShieldCheck, Package, DollarSign, Truck, Clock, CheckCircle2, XCircle, Search, Eye, Filter, ArrowUpDown, Trash2, MapPin } from 'lucide-react';
+import { List, X, RefreshCw, ShieldCheck, Package, DollarSign, Truck, Clock, CheckCircle2, XCircle, Search, Eye, Filter, ArrowUpDown, Trash2, MapPin, AlertTriangle } from 'lucide-react';
 import { getApiUrl } from '../config/api';
 
 export default function DataEntryModal({ isOpen, onClose, accessToken }) {
@@ -12,6 +12,11 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
   const [statusFilter, setStatusFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAdminOrder, setSelectedAdminOrder] = useState(null);
+
+  // Custom Delete Confirmation & Success Modal State
+  const [orderToDelete, setOrderToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletedOrderInfo, setDeletedOrderInfo] = useState(null);
 
   // Tab 2: Customer Inquiries State
   const [inquiries, setInquiries] = useState([]);
@@ -127,31 +132,75 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
     }
   };
 
-  // Handle Delete Order
-  const handleDeleteOrder = async (orderId) => {
-    if (!window.confirm(`Are you sure you want to delete Order #${orderId}?`)) return;
+  // Trigger Custom Delete Confirmation Modal
+  const handleDeleteOrder = (targetOrder) => {
+    if (!targetOrder) return;
+    setOrderToDelete(targetOrder);
+  };
+
+  // Execute Order Deletion via Backend API
+  const confirmExecuteDelete = async () => {
+    if (!orderToDelete) return;
+
+    const orderId = typeof orderToDelete === 'object'
+      ? (orderToDelete.orderId || orderToDelete._id)
+      : orderToDelete;
+
+    if (!orderId) {
+      setErrorMessage('Invalid order selected for deletion.');
+      setOrderToDelete(null);
+      return;
+    }
+
+    const displayId = typeof orderToDelete === 'object'
+      ? (orderToDelete.orderId || orderId)
+      : orderId;
 
     try {
+      setIsDeleting(true);
       setErrorMessage('');
-      const res = await fetch(getApiUrl(`/orders/${orderId}`), {
+      const deleteUrl = getApiUrl(`/orders/${encodeURIComponent(orderId)}`);
+
+      const res = await fetch(deleteUrl, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
       });
+
       const data = await res.json().catch(() => null);
 
       if (res.ok && data && data.success) {
-        setSuccessMessage(`Order #${orderId} deleted successfully.`);
-        setTimeout(() => setSuccessMessage(''), 3000);
-        if (selectedAdminOrder && selectedAdminOrder.orderId === orderId) {
+        // Instant local state update (no full web reload)
+        setOrders((prevOrders) =>
+          prevOrders.filter((o) => o.orderId !== orderId && o._id !== orderId)
+        );
+
+        if (selectedAdminOrder && (selectedAdminOrder.orderId === orderId || selectedAdminOrder._id === orderId)) {
           setSelectedAdminOrder(null);
         }
+
+        setSuccessMessage(`Order #${displayId} deleted successfully.`);
+        setTimeout(() => setSuccessMessage(''), 3500);
+
+        // Trigger Custom Success Modal
+        setDeletedOrderInfo({ displayId });
+
+        // Refresh metrics and database state
         fetchOrdersAndMetrics();
       } else {
-        setErrorMessage(data?.message || 'Failed to delete order.');
+        setErrorMessage(data?.message || `Failed to delete Order #${displayId}.`);
       }
     } catch (err) {
       console.error('Error deleting order:', err);
-      setErrorMessage(`Error deleting order: ${err.message}`);
+      const networkMsg = err.message === 'Failed to fetch'
+        ? 'Unable to connect to backend API. Please ensure the backend server is running and accessible.'
+        : err.message;
+      setErrorMessage(`Error deleting order: ${networkMsg}`);
+    } finally {
+      setIsDeleting(false);
+      setOrderToDelete(null);
     }
   };
 
@@ -429,7 +478,7 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                                   <Eye className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => handleDeleteOrder(ord.orderId)}
+                                  onClick={() => handleDeleteOrder(ord)}
                                   className="p-1.5 bg-zinc-800 hover:bg-red-600 hover:text-white text-zinc-400 rounded-lg transition-colors"
                                   title="Delete Order"
                                 >
@@ -494,12 +543,19 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                         </div>
 
                         {/* Action buttons */}
-                        <div className="pt-2 border-t border-zinc-800/80 flex justify-between">
+                        <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-2">
                           <button
                             onClick={() => setSelectedAdminOrder(ord)}
-                            className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 text-amber-400 font-bold text-xs rounded-xl flex items-center justify-center gap-1 border border-zinc-800"
+                            className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 text-amber-400 font-bold text-xs rounded-xl flex items-center justify-center gap-1 border border-zinc-800"
                           >
-                            <Eye className="w-3.5 h-3.5" /> View Order Details
+                            <Eye className="w-3.5 h-3.5" /> View Details
+                          </button>
+                          <button
+                            onClick={() => handleDeleteOrder(ord)}
+                            className="px-3 py-2 bg-red-950/40 hover:bg-red-600 text-red-400 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1 border border-red-800/50 transition-colors"
+                            title="Delete Order"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
                           </button>
                         </div>
                       </div>
@@ -573,12 +629,21 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                 <span className="text-amber-400 font-mono font-black text-xl">#{selectedAdminOrder.orderId}</span>
                 <span className="text-xs text-zinc-400">• Full Order Breakdown</span>
               </div>
-              <button
-                onClick={() => setSelectedAdminOrder(null)}
-                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDeleteOrder(selectedAdminOrder)}
+                  className="px-3 py-1.5 bg-red-950/60 hover:bg-red-600 border border-red-800 text-red-300 hover:text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors mr-2"
+                  title="Delete Order"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete Order
+                </button>
+                <button
+                  onClick={() => setSelectedAdminOrder(null)}
+                  className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6 overflow-y-auto space-y-5 text-xs">
@@ -695,6 +760,142 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                 </div>
               </div>
 
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ─── CUSTOM PREMIUM DELETE CONFIRMATION MODAL ────────────────── */}
+      {orderToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl p-6 sm:p-7 text-center text-zinc-100 animate-scaleUp">
+            
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => !isDeleting && setOrderToDelete(null)}
+              disabled={isDeleting}
+              className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors disabled:opacity-50"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Trash Icon Badge */}
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 shadow-lg shadow-red-500/10 mb-4">
+              <svg className="w-8 h-8 text-red-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </div>
+
+            {/* Modal Heading & Subtitle */}
+            <h4 className="text-xl font-extrabold text-white tracking-wide">
+              Delete Order?
+            </h4>
+            <p className="text-xs sm:text-sm text-zinc-300 mt-2 leading-relaxed">
+              Are you sure you want to permanently delete{' '}
+              <strong className="text-amber-400 font-mono text-sm">
+                Order #{typeof orderToDelete === 'object' ? (orderToDelete.orderId || orderToDelete._id) : orderToDelete}
+              </strong>?
+            </p>
+
+            {/* Warning Box */}
+            <div className="mt-4 p-3 bg-red-950/40 border border-red-800/60 rounded-xl text-red-300 text-xs font-semibold flex items-center justify-center gap-2">
+              <svg className="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <span>This action cannot be undone.</span>
+            </div>
+
+            {/* Action Buttons Grid */}
+            <div className="mt-6 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 py-3 px-4 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-zinc-300 hover:text-white font-bold text-xs rounded-xl transition-all border border-zinc-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmExecuteDelete}
+                disabled={isDeleting}
+                className="flex-1 py-3 px-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 border border-red-500 disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                    <span>Yes, Delete Order</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ─── CUSTOM DELETE SUCCESS MODAL ────────────────────────────── */}
+      {deletedOrderInfo && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl p-6 sm:p-7 text-center text-zinc-100 animate-scaleUp">
+            
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setDeletedOrderInfo(null)}
+              className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Check Circle Icon Badge */}
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10 mb-4">
+              <svg className="w-9 h-9 text-emerald-400 animate-bounce-short" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+
+            {/* Heading */}
+            <h4 className="text-xl font-extrabold text-white tracking-wide">
+              Order Deleted Successfully
+            </h4>
+
+            {/* Main Message with Order ID */}
+            <p className="text-sm text-zinc-300 mt-2 leading-relaxed">
+              Order <strong className="text-amber-400 font-mono text-sm">#{deletedOrderInfo.displayId}</strong> has been permanently deleted.
+            </p>
+
+            {/* Sub-message */}
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed bg-zinc-950/60 p-3 rounded-xl border border-zinc-800/80">
+              The order has been removed from the database and Order &amp; Sales list.
+            </p>
+
+            {/* Action OK / Done Button */}
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={() => setDeletedOrderInfo(null)}
+                className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 border border-emerald-500"
+              >
+                <span>OK / Done</span>
+              </button>
             </div>
 
           </div>
