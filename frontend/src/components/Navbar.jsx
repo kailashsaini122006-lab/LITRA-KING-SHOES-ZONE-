@@ -46,9 +46,6 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
           <div className="flex flex-col">
             <span className="text-lg sm:text-2xl font-extrabold tracking-wider text-white flex items-center gap-1.5">
               LITRA KING
-              <span className="text-[10px] sm:text-xs bg-red-600 text-white font-bold px-1.5 py-0.5 rounded tracking-normal uppercase">
-                Shoes Zone
-              </span>
             </span>
             <span className="text-[10px] sm:text-xs font-semibold tracking-widest text-amber-400 uppercase">
               ONLINE FOOTWEAR STORE

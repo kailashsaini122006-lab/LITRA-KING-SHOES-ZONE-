@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, KeyRound, X, RefreshCw, AlertTriangle, CheckCircle2, Mail, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Lock, KeyRound, X, RefreshCw, AlertTriangle, CheckCircle2, Mail, ArrowLeft, ShieldCheck, Eye, EyeOff, User } from 'lucide-react';
 import { getApiUrl } from '../config/api';
 
 export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
@@ -7,7 +7,10 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
   const [viewState, setViewState] = useState('verify');
 
   // Input States
+  const [adminId, setAdminId] = useState('');
+  const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [maskedEmail, setMaskedEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [resetToken, setResetToken] = useState('');
@@ -22,7 +25,10 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
   useEffect(() => {
     if (isOpen) {
       setViewState('verify');
+      setAdminId('');
+      setPassword('');
       setPin('');
+      setShowPassword(false);
       setResetCode('');
       setResetToken('');
       setNewPin('');
@@ -78,14 +84,24 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
     }
   };
 
-  // 1. Verify PIN Handler
+  // 1. Admin Login & PIN Verification Handler
   const handleVerifyPin = async (e) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
+    if (!adminId.trim()) {
+      setErrorMessage('Please enter Admin ID');
+      return;
+    }
+
+    if (!password.trim()) {
+      setErrorMessage('Please enter Password');
+      return;
+    }
+
     if (!pin || pin.length !== 4) {
-      setErrorMessage('Please enter a valid 4-digit PIN');
+      setErrorMessage('Security PIN must be exactly 4 digits');
       return;
     }
 
@@ -94,20 +110,24 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
       const res = await fetch(getApiUrl('/auth/verify-pin'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({
+          adminId: adminId.trim(),
+          password: password.trim(),
+          pin: pin.trim(),
+        }),
       });
 
       const data = await res.json().catch(() => null);
 
       if (res.ok && data && data.success) {
-        setSuccessMessage('PIN verified successfully');
+        setSuccessMessage('Admin Login verified successfully');
         sessionStorage.setItem('lk_access_token', data.accessToken);
 
         setTimeout(() => {
           onAuthSuccess(data.accessToken);
-        }, 600);
+        }, 500);
       } else {
-        const msg = data?.message || 'Incorrect Security PIN, Access Denied!';
+        const msg = data?.message || 'Invalid Admin ID, Password or Security PIN';
         setErrorMessage(msg);
       }
     } catch (err) {
@@ -118,7 +138,7 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
     }
   };
 
-  // 2. Open Forgot PIN Flow
+  // 2. Open Forgot Flow
   const handleOpenForgot = () => {
     setErrorMessage('');
     setSuccessMessage('');
@@ -246,6 +266,8 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
 
   const handleReturnToLogin = () => {
     setViewState('verify');
+    setAdminId('');
+    setPassword('');
     setPin('');
     setNewPin('');
     setConfirmPin('');
@@ -269,14 +291,14 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
             </div>
             <div>
               <h3 className="text-base font-extrabold text-white tracking-wider uppercase">
-                {viewState === 'verify' && 'SECURITY PIN VERIFICATION'}
-                {viewState === 'forgot-request' && 'FORGOT SECURITY PIN'}
+                {viewState === 'verify' && 'ADMIN LOGIN'}
+                {viewState === 'forgot-request' && 'FORGOT CREDENTIALS'}
                 {viewState === 'verify-code' && 'VERIFY RESET CODE'}
                 {viewState === 'create-new-pin' && 'CREATE NEW SECURITY PIN'}
                 {viewState === 'reset-success' && 'PIN RESET SUCCESSFUL'}
               </h3>
               <p className="text-xs text-zinc-400">
-                {viewState === 'verify' && 'Enter 4-Digit Security PIN to unlock Saved Records'}
+                {viewState === 'verify' && 'Enter Admin Credentials & Security PIN to access Admin Portal'}
                 {viewState === 'forgot-request' && 'Send 6-digit verification code to admin email'}
                 {viewState === 'verify-code' && 'Enter 6-digit code sent to your email'}
                 {viewState === 'create-new-pin' && 'Set your new 4-digit Security PIN'}
@@ -313,65 +335,106 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
             </div>
           )}
 
-          {/* VIEW 1: Main Security PIN Input */}
+          {/* VIEW 1: Main Admin Login Form */}
           {viewState === 'verify' && (
-            <form onSubmit={handleVerifyPin} className="space-y-5">
-              <div className="space-y-2 text-center">
-                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center justify-center gap-1.5">
-                  <KeyRound className="w-4 h-4 text-amber-400" /> Enter 4-Digit Security Key
+            <form onSubmit={handleVerifyPin} className="space-y-4">
+              
+              {/* Admin ID Field */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-amber-400" /> Admin ID *
                 </label>
-
-                {/* 4-Digit PIN Input Box */}
-                <div className="relative max-w-xs mx-auto">
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength="4"
-                    value={pin}
-                    onChange={handlePinChange}
-                    placeholder="• • • •"
-                    required
-                    className="w-full bg-zinc-950 border-2 border-zinc-800 rounded-2xl px-4 py-3.5 text-center text-3xl font-mono font-black tracking-[1em] text-amber-400 placeholder-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all"
-                    autoFocus
-                  />
-                </div>
-                <p className="text-[11px] text-zinc-500">
-                  Only numbers allowed (4 digits)
-                </p>
+                <input
+                  type="text"
+                  value={adminId}
+                  onChange={(e) => { setAdminId(e.target.value); setErrorMessage(''); }}
+                  placeholder="Enter Admin ID"
+                  required
+                  autoFocus
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-xs font-bold focus:outline-none focus:border-amber-400 transition-colors"
+                />
               </div>
 
-              {/* VERIFY / UNLOCK Button */}
+              {/* Password Field */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" /> Password *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setErrorMessage(''); }}
+                    placeholder="Enter Password"
+                    required
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-11 py-3 text-white text-xs font-mono focus:outline-none focus:border-amber-400 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white p-1 transition-colors"
+                    title={showPassword ? "Hide Password" : "Show Password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Security PIN Field */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Security PIN * (4 Digits)
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength="4"
+                  value={pin}
+                  onChange={handlePinChange}
+                  placeholder="• • • •"
+                  required
+                  className="w-full bg-zinc-950 border-2 border-zinc-800 rounded-xl px-4 py-2.5 text-center text-xl font-mono font-black tracking-[0.5em] text-amber-400 placeholder-zinc-700 focus:outline-none focus:border-amber-400 transition-colors"
+                />
+              </div>
+
+              {/* LOGIN / VERIFY Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full py-3.5 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${
-                  !loading
-                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/25 hover:scale-[1.01]'
-                    : 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
-                }`}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-zinc-950 font-extrabold rounded-2xl text-xs sm:text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 mt-2"
               >
                 {loading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> VERIFYING PIN...
+                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>AUTHENTICATING...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-5 h-5" /> VERIFY / UNLOCK
+                    <Lock className="w-4 h-4 fill-zinc-950" />
+                    <span>🔐 LOGIN / VERIFY</span>
                   </>
                 )}
               </button>
 
-              {/* Forgot Security PIN Link */}
-              <div className="text-center pt-2">
+              {/* Forgot Links */}
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800/80">
                 <button
                   type="button"
                   onClick={handleOpenForgot}
-                  className="text-xs font-semibold text-amber-400 hover:text-amber-300 hover:underline transition-colors focus:outline-none"
+                  className="text-amber-400 hover:text-amber-300 hover:underline font-bold transition-colors"
+                >
+                  Forgot Password?
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenForgot}
+                  className="text-amber-400 hover:text-amber-300 hover:underline font-bold transition-colors"
                 >
                   Forgot Security PIN?
                 </button>
               </div>
+
             </form>
           )}
 

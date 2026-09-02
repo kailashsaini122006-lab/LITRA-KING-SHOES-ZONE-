@@ -1,10 +1,45 @@
 import React from 'react';
 import { Phone, Navigation, Sparkles, ShieldCheck, Tag, ShoppingBag } from 'lucide-react';
 import heroShopImg from '../assets/hero_shop.png';
+import AeroShards from './AeroShards';
 
 export default function Hero() {
   return (
     <section id="home" className="relative min-h-screen pt-24 sm:pt-28 md:pt-36 pb-16 md:pb-24 flex items-start lg:items-center bg-zinc-950 overflow-hidden">
+      {/* WebGPU AeroShards Interactive Visual Background */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-40">
+        <AeroShards
+          backgroundColor="#09090b"
+          shardColor="#f59e0b"
+          accentColor="#dc2626"
+          placement="full"
+          flow="stream"
+          material="pearl"
+          detail="balanced"
+          effect="none"
+          scale={1}
+          spread={1}
+          depth={1}
+          speed={0.8}
+          spin={1}
+          interaction="repel"
+          density={1.2}
+          shardSize={1.0}
+          stretch={1}
+          turbulence={1}
+          glow={1}
+          edgeSoftness={2}
+          bloom={0.5}
+          grain={0.05}
+          chromaticAberration={0.005}
+          transitionDuration={1}
+          interactionRadius={1.5}
+          interactionStrength={0.5}
+          rippleIntensity={1}
+          holdToGather={true}
+        />
+      </div>
+
       {/* Background Radial Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-amber-500/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-10 right-0 w-[400px] h-[400px] bg-red-600/10 rounded-full blur-[120px] pointer-events-none" />
