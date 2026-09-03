@@ -577,6 +577,7 @@ fn vs_main(
     let orbit = vec2f(cos(angle), sin(angle));
     let layer = seedDepth * 6.28318530718;
     let drift = vec2f(sin(layer + view.gather.w * 0.22), cos(layer * 1.7 - view.gather.w * 0.18)) * 0.055;
+    let cloud = orbit * radius + drift;
     let cluster = vec3f(view.gather.xy + cloud / view.viewport.z, (seedDepth - 0.5) * 0.42);
     // Distant layers arrive later; there is no single closing boundary.
     let amount = pow(view.gather.z, 1.0 + seedDepth * 0.65 + min(reach, 4.0) * 0.12);
@@ -1583,7 +1584,7 @@ export default function AeroShards({
         setReady(false);
         const resolvedQuality = resolveQuality(canvas);
         const preset = QUALITY_PRESETS[resolvedQuality] || QUALITY_PRESETS.medium;
-        gpu = await init({ powerPreference: 'low-power' });
+        gpu = await init();
         if (disposed) return gpu.dispose();
         unsubscribeGpuError = gpu.onError(reportFailure);
 

@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, KeyRound, X, RefreshCw, AlertTriangle, CheckCircle2, Mail, ArrowLeft, ShieldCheck, Eye, EyeOff, User } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, X, RefreshCw, AlertTriangle, CheckCircle2, ArrowLeft, KeyRound, ShieldCheck } from 'lucide-react';
 import { getApiUrl } from '../config/api';
 
 export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
-  // Modal View States: 'verify' | 'forgot-request' | 'verify-code' | 'create-new-pin' | 'reset-success'
-  const [viewState, setViewState] = useState('verify');
+  // Modal View States: 'login' | 'forgot-request' | 'verify-code' | 'create-new-password' | 'reset-success'
+  const [viewState, setViewState] = useState('login');
 
-  // Input States
-  const [pin, setPin] = useState('');
-  const [maskedEmail, setMaskedEmail] = useState('');
+  // Login Input States
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Forgot Password States
+  const [forgotEmail, setForgotEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
-  const [resetToken, setResetToken] = useState('');
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   // UI Feedback States
   const [loading, setLoading] = useState(false);
@@ -21,225 +25,196 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
 
   useEffect(() => {
     if (isOpen) {
-      setViewState('verify');
-      setPin('');
+      setViewState('login');
+      setEmail('');
+      setPassword('');
+      setShowPassword(false);
+      setForgotEmail('');
       setResetCode('');
-      setResetToken('');
-      setNewPin('');
-      setConfirmPin('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowNewPassword(false);
       setErrorMessage('');
       setSuccessMessage('');
-      fetchMaskedEmail();
     }
   }, [isOpen]);
 
-  const fetchMaskedEmail = async () => {
-    try {
-      const res = await fetch(getApiUrl('/auth/security-pin/masked-email'));
-      const data = await res.json().catch(() => null);
-      if (res.ok && data && data.maskedEmail) {
-        setMaskedEmail(data.maskedEmail);
-      }
-    } catch {
-      // Fallback display if fetch fails
-      setMaskedEmail('ka****@gmail.com');
-    }
-  };
-
-  const handlePinChange = (e) => {
-    const val = e.target.value.replace(/\D/g, ''); // Numbers only
-    if (val.length <= 4) {
-      setPin(val);
-      setErrorMessage('');
-    }
-  };
-
-  const handleNewPinChange = (e) => {
-    const val = e.target.value.replace(/\D/g, '');
-    if (val.length <= 4) {
-      setNewPin(val);
-      setErrorMessage('');
-    }
-  };
-
-  const handleConfirmPinChange = (e) => {
-    const val = e.target.value.replace(/\D/g, '');
-    if (val.length <= 4) {
-      setConfirmPin(val);
-      setErrorMessage('');
-    }
-  };
-
-  const handleCodeChange = (e) => {
-    const val = e.target.value.replace(/\D/g, '');
-    if (val.length <= 6) {
-      setResetCode(val);
-      setErrorMessage('');
-    }
-  };
-
-  // 1. Admin Login & PIN Verification Handler
-  const handleVerifyPin = async (e) => {
+  // Handle Admin Email + Password Login
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!pin || pin.length !== 4) {
-      setErrorMessage('Security PIN must be exactly 4 digits');
+    const cleanInput = email.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanInput || !cleanPassword) {
+      setErrorMessage('Invalid Admin ID or Password');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await fetch(getApiUrl('/auth/verify-pin'), {
+      const res = await fetch(getApiUrl('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pin: pin.trim(),
+          adminId: cleanInput,
+          email: cleanInput,
+          password: cleanPassword,
         }),
       });
 
       const data = await res.json().catch(() => null);
 
       if (res.ok && data && data.success) {
-        setSuccessMessage('Admin Login verified successfully');
-        sessionStorage.setItem('lk_access_token', data.accessToken);
+        setSuccessMessage('Admin login verified successfully!');
+        if (data.accessToken) {
+          sessionStorage.setItem('lk_access_token', data.accessToken);
+        }
 
         setTimeout(() => {
           onAuthSuccess(data.accessToken);
         }, 500);
       } else {
-        const msg = data?.message || 'Invalid Security PIN';
-        setErrorMessage(msg);
+        setErrorMessage(data?.message || 'Invalid Admin ID or Password');
       }
     } catch (err) {
-      console.error('PIN verify error:', err);
+      console.error('Login connection error:', err);
       setErrorMessage(`Connection Error (${err.message}). Make sure backend server is running.`);
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. Open Forgot Flow
+  // Open Forgot Password View
   const handleOpenForgot = () => {
     setErrorMessage('');
     setSuccessMessage('');
+    setForgotEmail(email || '');
     setViewState('forgot-request');
   };
 
-  // 3. Send Reset Code Handler
-  const handleSendResetCode = async (e) => {
+  // Send Password Reset OTP
+  const handleSendResetOtp = async (e) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
+    if (!forgotEmail.trim()) {
+      setErrorMessage('Please enter your admin email.');
+      return;
+    }
+
     try {
       setLoading(true);
-      const res = await fetch(getApiUrl('/auth/security-pin/forgot'), {
+      const res = await fetch(getApiUrl('/auth/forgot-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
       });
 
       const data = await res.json().catch(() => null);
 
       if (res.ok && data && data.success) {
-        if (data.maskedEmail) setMaskedEmail(data.maskedEmail);
-        setSuccessMessage(data.message || 'Reset code sent to your registered email.');
+        setSuccessMessage(data.message || 'OTP code sent to your registered admin email.');
         setTimeout(() => {
           setSuccessMessage('');
           setViewState('verify-code');
         }, 1200);
       } else {
-        setErrorMessage(data?.message || 'Failed to send reset code. Please try again.');
+        setErrorMessage(data?.message || 'Failed to send reset OTP. Please try again.');
       }
     } catch (err) {
-      console.error('Forgot PIN error:', err);
       setErrorMessage(`Connection Error (${err.message}).`);
     } finally {
       setLoading(false);
     }
   };
 
-  // 4. Verify Reset Code Handler
-  const handleVerifyResetCode = async (e) => {
+  // Verify Reset OTP Code
+  const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!resetCode || resetCode.length !== 6) {
-      setErrorMessage('Invalid or expired verification code.');
+    if (!resetCode || resetCode.trim().length !== 6) {
+      setErrorMessage('Please enter a valid 6-digit OTP code.');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await fetch(getApiUrl('/auth/security-pin/verify-reset-code'), {
+      const res = await fetch(getApiUrl('/auth/verify-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: resetCode }),
+        body: JSON.stringify({ email: forgotEmail.trim(), otp: resetCode.trim() }),
       });
 
       const data = await res.json().catch(() => null);
 
       if (res.ok && data && data.success) {
-        if (data.resetToken) setResetToken(data.resetToken);
-        setSuccessMessage('Code verified successfully.');
+        setSuccessMessage('OTP code verified successfully.');
         setTimeout(() => {
           setSuccessMessage('');
-          setViewState('create-new-pin');
+          setViewState('create-new-password');
         }, 800);
       } else {
-        setErrorMessage(data?.message || 'Invalid or expired verification code.');
+        setErrorMessage(data?.message || 'Invalid or expired OTP code.');
       }
     } catch (err) {
-      console.error('Verify code error:', err);
-      setErrorMessage('Invalid or expired verification code.');
+      setErrorMessage('Invalid or expired OTP code.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 5. Save New Security PIN Handler
-  const handleResetPinSubmit = async (e) => {
+  // Submit New Password
+  const handleResetPasswordSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!newPin || newPin.length !== 4 || !confirmPin || confirmPin.length !== 4) {
-      setErrorMessage('Security PIN must contain exactly 4 digits.');
+    if (!newPassword || !confirmPassword) {
+      setErrorMessage('Please fill in both password fields.');
       return;
     }
 
-    if (newPin !== confirmPin) {
-      setErrorMessage('Security PINs do not match.');
+    if (newPassword !== confirmPassword) {
+      setErrorMessage('Passwords do not match.');
+      return;
+    }
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#_\-.,;:!+=])[A-Za-z\d@$!%*?&#_\-.,;:!+=]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      setErrorMessage('Password must be at least 8 characters long and contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 special character (e.g. @$!%*?&#).');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await fetch(getApiUrl('/auth/security-pin/reset'), {
+      const res = await fetch(getApiUrl('/auth/reset-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          resetToken,
-          code: resetCode,
-          newPin,
-          confirmPin,
+          email: forgotEmail.trim(),
+          otp: resetCode.trim(),
+          newPassword: newPassword.trim(),
+          confirmPassword: confirmPassword.trim(),
         }),
       });
 
       const data = await res.json().catch(() => null);
 
       if (res.ok && data && data.success) {
-        setSuccessMessage('Security PIN changed successfully.');
+        setSuccessMessage('Password reset successfully.');
         setTimeout(() => {
           setViewState('reset-success');
         }, 600);
       } else {
-        setErrorMessage(data?.message || 'Failed to update Security PIN.');
+        setErrorMessage(data?.message || 'Failed to reset password.');
       }
     } catch (err) {
-      console.error('Reset PIN error:', err);
       setErrorMessage(`Connection Error (${err.message}).`);
     } finally {
       setLoading(false);
@@ -247,12 +222,12 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
   };
 
   const handleReturnToLogin = () => {
-    setViewState('verify');
-    setPin('');
-    setNewPin('');
-    setConfirmPin('');
+    setViewState('login');
+    setPassword('');
+    setShowPassword(false);
     setResetCode('');
-    setResetToken('');
+    setNewPassword('');
+    setConfirmPassword('');
     setErrorMessage('');
     setSuccessMessage('');
   };
@@ -260,48 +235,51 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
-      <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn">
+      {/* Container: #121212 background, rounded-3xl corners, dark shadow */}
+      <div className="relative w-full max-w-md bg-[#121212] border border-zinc-800/90 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden text-zinc-100 transition-all">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/70">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
-              <Lock className="w-6 h-6" />
+        <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800/80 bg-[#121212]">
+          <div className="flex items-center gap-3.5">
+            {/* Top-left: yellow lock icon inside a rounded square box with yellow border */}
+            <div className="w-11 h-11 flex items-center justify-center bg-amber-400/10 border-2 border-amber-400 rounded-xl text-amber-400 shrink-0 shadow-[0_0_12px_rgba(251,191,36,0.2)]">
+              <Lock className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-white tracking-wider uppercase">
-                {viewState === 'verify' && 'ADMIN LOGIN'}
-                {viewState === 'forgot-request' && 'FORGOT CREDENTIALS'}
-                {viewState === 'verify-code' && 'VERIFY RESET CODE'}
-                {viewState === 'create-new-pin' && 'CREATE NEW SECURITY PIN'}
-                {viewState === 'reset-success' && 'PIN RESET SUCCESSFUL'}
+              <h3 className="text-base sm:text-lg font-bold text-white tracking-wider uppercase leading-tight">
+                {viewState === 'login' && 'ADMIN LOGIN'}
+                {viewState === 'forgot-request' && 'FORGOT PASSWORD'}
+                {viewState === 'verify-code' && 'VERIFY OTP CODE'}
+                {viewState === 'create-new-password' && 'CREATE NEW PASSWORD'}
+                {viewState === 'reset-success' && 'PASSWORD RESET SUCCESSFUL'}
               </h3>
-              <p className="text-xs text-zinc-400">
-                {viewState === 'verify' && 'Enter 4-digit Security PIN to access Admin Portal'}
-                {viewState === 'forgot-request' && 'Send 6-digit verification code to admin email'}
-                {viewState === 'verify-code' && 'Enter 6-digit code sent to your email'}
-                {viewState === 'create-new-pin' && 'Set your new 4-digit Security PIN'}
-                {viewState === 'reset-success' && 'Your Security PIN has been updated'}
+              <p className="text-xs text-zinc-400 mt-0.5 leading-snug">
+                {viewState === 'login' && 'Enter Admin Credentials to access Admin Portal'}
+                {viewState === 'forgot-request' && 'Enter your admin email to receive reset OTP'}
+                {viewState === 'verify-code' && 'Enter 6-digit OTP code sent to your email'}
+                {viewState === 'create-new-password' && 'Set your new admin password'}
+                {viewState === 'reset-success' && 'Your admin password has been updated'}
               </p>
             </div>
           </div>
 
+          {/* Top-right X close button */}
           <button
             onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
-            aria-label="Close Security Modal"
+            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-xl transition-colors shrink-0"
+            aria-label="Close Admin Login Modal"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-5">
+        <div className="p-6 sm:p-7 space-y-6">
           
           {/* Error Alert */}
           {errorMessage && (
-            <div className="flex items-start gap-3 p-3.5 bg-red-950/70 border border-red-800/80 rounded-2xl text-red-300 text-xs animate-shake">
+            <div className="flex items-start gap-3 p-3.5 bg-red-950/80 border border-red-800 rounded-2xl text-red-300 text-xs animate-shake">
               <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
@@ -309,95 +287,137 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
 
           {/* Success Alert */}
           {successMessage && (
-            <div className="flex items-center gap-3 p-3.5 bg-emerald-950/70 border border-emerald-800/80 rounded-2xl text-emerald-300 text-xs">
+            <div className="flex items-center gap-3 p-3.5 bg-emerald-950/80 border border-emerald-800 rounded-2xl text-emerald-300 text-xs">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>{successMessage}</span>
             </div>
           )}
 
           {/* VIEW 1: Main Admin Login Form */}
-          {viewState === 'verify' && (
-            <form onSubmit={handleVerifyPin} className="space-y-5">
+          {viewState === 'login' && (
+            <form onSubmit={handleLoginSubmit} className="space-y-5">
               
-              {/* Security PIN Field */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Security PIN * (4 Digits)
+              {/* ADMIN EMAIL / ID Section */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Mail className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>ADMIN ID *</span>
                 </label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength="4"
-                  value={pin}
-                  onChange={handlePinChange}
-                  placeholder="• • • •"
-                  required
-                  autoFocus
-                  className="w-full bg-zinc-950 border-2 border-zinc-800 rounded-xl px-4 py-3 text-center text-xl font-mono font-black tracking-[0.5em] text-amber-400 placeholder-zinc-700 focus:outline-none focus:border-amber-400 transition-colors"
-                />
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setErrorMessage('');
+                    }}
+                    placeholder="Enter admin email"
+                    required
+                    autoFocus
+                    className="w-full bg-[#0a0a0a] border-2 border-zinc-800 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium text-white placeholder-zinc-600 transition-all duration-200 focus:outline-none focus:border-[#FF8C00] focus:ring-2 focus:ring-[#FF8C00]/30 focus:shadow-[0_0_20px_rgba(255,140,0,0.25)]"
+                  />
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                </div>
               </div>
 
-              {/* LOGIN / VERIFY PIN Button */}
+              {/* PASSWORD Section */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>PASSWORD *</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setErrorMessage('');
+                    }}
+                    placeholder="Enter admin password"
+                    required
+                    className="w-full bg-[#0a0a0a] border-2 border-zinc-800 rounded-2xl px-4 py-3.5 pl-11 pr-11 text-sm font-medium text-white placeholder-zinc-600 transition-all duration-200 focus:outline-none focus:border-[#FF8C00] focus:ring-2 focus:ring-[#FF8C00]/30 focus:shadow-[0_0_20px_rgba(255,140,0,0.25)]"
+                  />
+                  <Lock className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-white transition-colors"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* LOGIN BUTTON */}
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-zinc-950 font-extrabold rounded-2xl text-xs sm:text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 mt-2"
+                disabled={loading || !email.trim() || !password.trim()}
+                className="w-full py-4 mt-2 bg-[#FF8C00] hover:bg-[#e57d00] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none text-black font-bold uppercase rounded-2xl text-sm sm:text-base tracking-wider transition-all duration-200 shadow-[0_4px_20px_rgba(255,140,0,0.35)] hover:shadow-[0_6px_25px_rgba(255,140,0,0.5)] hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2.5"
               >
                 {loading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+                    <RefreshCw className="w-5 h-5 animate-spin text-black" />
                     <span>VERIFYING...</span>
                   </>
                 ) : (
                   <>
-                    <span>🔐 LOGIN / VERIFY PIN</span>
+                    <Lock className="w-5 h-5 fill-black text-black shrink-0" />
+                    <span>LOGIN / VERIFY</span>
                   </>
                 )}
               </button>
 
-              {/* Forgot Security PIN Link */}
-              <div className="flex items-center justify-center text-xs pt-3 border-t border-zinc-800/80">
+              {/* FORGOT PASSWORD Link */}
+              <div className="flex items-center justify-center text-xs pt-2">
                 <button
                   type="button"
                   onClick={handleOpenForgot}
-                  className="text-amber-400 hover:text-amber-300 hover:underline font-bold transition-colors"
+                  className="text-[#FFD700] hover:text-amber-300 hover:underline font-bold transition-colors cursor-pointer"
                 >
-                  Forgot Security PIN?
+                  Forgot Password?
                 </button>
               </div>
 
             </form>
           )}
 
-          {/* VIEW 2: Forgot Security PIN - Request Code */}
+          {/* VIEW 2: Forgot Password - Request OTP */}
           {viewState === 'forgot-request' && (
-            <form onSubmit={handleSendResetCode} className="space-y-5">
-              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2">
-                <div className="text-xs text-zinc-400 flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-amber-400" />
-                  <span>Registered Admin Email:</span>
+            <form onSubmit={handleSendResetOtp} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-amber-400">
+                  Registered Admin Email *
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="Enter admin email address"
+                    required
+                    className="w-full bg-[#0a0a0a] border-2 border-zinc-800 rounded-2xl px-4 py-3.5 pl-11 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#FF8C00]"
+                  />
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" />
                 </div>
-                <div className="text-sm font-mono font-bold text-amber-300 tracking-wider">
-                  {maskedEmail || 'ka****@gmail.com'}
-                </div>
-                <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  Click below to send a 6-digit verification code to your registered admin email address.
+                <p className="text-[11px] text-zinc-500 leading-relaxed pt-1">
+                  We will send a 6-digit OTP reset code to your registered admin email address.
                 </p>
               </div>
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold rounded-2xl text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+                disabled={loading || !forgotEmail.trim()}
+                className="w-full py-3.5 bg-[#FF8C00] hover:bg-[#e57d00] disabled:opacity-50 text-black font-bold uppercase tracking-wider rounded-2xl text-sm transition-all shadow-[0_4px_20px_rgba(255,140,0,0.35)] flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> SENDING RESET CODE...
+                    <RefreshCw className="w-4 h-4 animate-spin text-black" /> SENDING OTP...
                   </>
                 ) : (
                   <>
-                    <Mail className="w-4 h-4" /> Send Reset Code
+                    <Mail className="w-4 h-4 text-black" /> Send Reset OTP
                   </>
                 )}
               </button>
@@ -405,19 +425,19 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
               <button
                 type="button"
                 onClick={handleReturnToLogin}
-                className="w-full py-2.5 text-xs text-zinc-400 hover:text-white flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full py-2 text-xs text-zinc-400 hover:text-white flex items-center justify-center gap-1.5 transition-colors"
               >
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to PIN Login
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Admin Login
               </button>
             </form>
           )}
 
-          {/* VIEW 3: Verify 6-Digit Code */}
+          {/* VIEW 3: Verify OTP Code */}
           {viewState === 'verify-code' && (
-            <form onSubmit={handleVerifyResetCode} className="space-y-5">
+            <form onSubmit={handleVerifyOtp} className="space-y-5">
               <div className="space-y-2 text-center">
-                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center justify-center gap-1.5">
-                  <Mail className="w-4 h-4 text-amber-400" /> Enter 6-digit verification code
+                <label className="text-xs font-bold uppercase tracking-widest text-amber-400 flex items-center justify-center gap-1.5">
+                  <Mail className="w-4 h-4 text-amber-400" /> Enter 6-digit OTP code
                 </label>
 
                 <div className="relative max-w-xs mx-auto">
@@ -425,32 +445,32 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    maxLength="6"
+                    maxLength={6}
                     value={resetCode}
-                    onChange={handleCodeChange}
+                    onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="1 2 3 4 5 6"
                     required
-                    className="w-full bg-zinc-950 border-2 border-zinc-800 rounded-2xl px-4 py-3.5 text-center text-2xl font-mono font-bold tracking-[0.5em] text-amber-400 placeholder-zinc-700 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all"
+                    className="w-full bg-[#0a0a0a] border-2 border-zinc-800 rounded-2xl px-4 py-3.5 text-center text-2xl font-mono font-bold tracking-[0.5em] text-amber-400 placeholder-zinc-700 focus:outline-none focus:border-[#FF8C00] focus:ring-2 focus:ring-[#FF8C00]/30 transition-all"
                     autoFocus
                   />
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  Check your inbox for the 6-digit code (valid for 10 min)
+                  Check your inbox for the 6-digit OTP code (valid for 10 min)
                 </p>
               </div>
 
               <button
                 type="submit"
                 disabled={loading || resetCode.length !== 6}
-                className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-zinc-950 font-extrabold rounded-2xl text-sm transition-all shadow-lg flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-[#FF8C00] hover:bg-[#e57d00] disabled:opacity-50 text-black font-bold uppercase tracking-wider rounded-2xl text-sm transition-all shadow-[0_4px_20px_rgba(255,140,0,0.35)] flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> VERIFYING CODE...
+                    <RefreshCw className="w-4 h-4 animate-spin text-black" /> VERIFYING OTP...
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" /> Verify Code
+                    <CheckCircle2 className="w-4 h-4 text-black" /> Verify OTP
                   </>
                 )}
               </button>
@@ -458,11 +478,11 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
               <div className="flex items-center justify-between text-xs pt-1">
                 <button
                   type="button"
-                  onClick={handleSendResetCode}
+                  onClick={handleSendResetOtp}
                   disabled={loading}
                   className="text-amber-400 hover:underline"
                 >
-                  Resend Code
+                  Resend OTP
                 </button>
                 <button
                   type="button"
@@ -475,59 +495,60 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
             </form>
           )}
 
-          {/* VIEW 4: Create New Security PIN */}
-          {viewState === 'create-new-pin' && (
-            <form onSubmit={handleResetPinSubmit} className="space-y-4">
+          {/* VIEW 4: Create New Password */}
+          {viewState === 'create-new-password' && (
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-400 mb-1">
-                    New Security PIN (4 Digits)
+                  <label className="block text-xs font-bold text-amber-400 mb-1">
+                    New Password
                   </label>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength="4"
-                    value={newPin}
-                    onChange={handleNewPinChange}
-                    placeholder="••••"
-                    required
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-center text-xl font-mono text-amber-400 tracking-[0.5em] focus:outline-none focus:border-amber-500 transition-all"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      required
+                      className="w-full bg-[#0a0a0a] border border-zinc-800 rounded-xl px-4 py-3 pr-10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#FF8C00] transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-400 mb-1">
-                    Confirm New Security PIN
+                  <label className="block text-xs font-bold text-amber-400 mb-1">
+                    Confirm New Password
                   </label>
                   <input
                     type="password"
-                    inputMode="numeric"
-                    maxLength="4"
-                    value={confirmPin}
-                    onChange={handleConfirmPinChange}
-                    placeholder="••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
                     required
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-center text-xl font-mono text-amber-400 tracking-[0.5em] focus:outline-none focus:border-amber-500 transition-all"
+                    className="w-full bg-[#0a0a0a] border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#FF8C00] transition-all"
                   />
                 </div>
-
-                <p className="text-[11px] text-zinc-500 text-center">
-                  PIN must be exactly 4 digits (numbers only)
-                </p>
               </div>
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-extrabold rounded-2xl text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+                disabled={loading || !newPassword || !confirmPassword}
+                className="w-full py-3.5 bg-[#FF8C00] hover:bg-[#e57d00] disabled:opacity-50 text-black font-bold uppercase tracking-wider rounded-2xl text-sm transition-all shadow-[0_4px_20px_rgba(255,140,0,0.35)] flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> SAVING NEW PIN...
+                    <RefreshCw className="w-4 h-4 animate-spin text-black" /> SAVING PASSWORD...
                   </>
                 ) : (
                   <>
-                    <ShieldCheck className="w-5 h-5" /> Reset Security PIN
+                    <ShieldCheck className="w-5 h-5 text-black" /> Reset Password
                   </>
                 )}
               </button>
@@ -549,18 +570,18 @@ export default function SecurityModal({ isOpen, onClose, onAuthSuccess }) {
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-white">Security PIN changed successfully.</h4>
+                <h4 className="text-base font-bold text-white">Password changed successfully.</h4>
                 <p className="text-xs text-zinc-400 mt-1">
-                  You can now log in using your NEW 4-digit Security PIN to unlock Saved Records.
+                  You can now log in using your NEW password to access the Admin Portal.
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={handleReturnToLogin}
-                className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold rounded-2xl text-sm transition-all shadow-lg flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-[#FF8C00] hover:bg-[#e57d00] text-black font-bold uppercase tracking-wider rounded-2xl text-sm transition-all shadow-lg flex items-center justify-center gap-2"
               >
-                <KeyRound className="w-4 h-4" /> Return to PIN Verification
+                <KeyRound className="w-4 h-4 text-black" /> Return to Admin Login
               </button>
             </div>
           )}

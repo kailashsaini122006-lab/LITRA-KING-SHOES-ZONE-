@@ -9,21 +9,34 @@ const JWT_SECRET = process.env.JWT_SECRET || 'litra_king_shoes_zone_super_secure
 /**
  * Helper to get primary admin user or auto-seed if empty
  */
-async function getOrCreateAdminUser(reqEmail) {
-  const targetEmail = (reqEmail || process.env.ADMIN_EMAIL || DEFAULT_RECIPIENT).trim().toLowerCase();
+async function getOrCreateAdminUser(reqInput) {
+  const cleanInput = (reqInput || '').trim();
 
-  let admin = await AdminUser.findOne({ email: targetEmail });
+  let admin = null;
+  if (cleanInput) {
+    admin = await AdminUser.findOne({
+      $or: [
+        { email: cleanInput.toLowerCase() },
+        { adminId: cleanInput },
+        { adminId: cleanInput.toLowerCase() },
+      ],
+    });
+  }
+
+  // Fallback to first existing admin account in MongoDB
   if (!admin) {
     admin = await AdminUser.findOne().sort({ createdAt: 1 });
   }
 
   const configuredEnvPass = process.env.ADMIN_PASSWORD || 'litra123';
   const configuredEnvPin = (process.env.ADMIN_SECURITY_PIN || '9876').trim();
+  const targetEmail = (process.env.ADMIN_EMAIL || DEFAULT_RECIPIENT).trim().toLowerCase();
 
   if (!admin) {
     const hashedPassword = process.env.ADMIN_PASSWORD_HASH || bcrypt.hashSync(configuredEnvPass, 10);
     const hashedPin = bcrypt.hashSync(configuredEnvPin, 10);
     admin = await AdminUser.create({
+      adminId: 'admin',
       email: targetEmail,
       password: hashedPassword,
       securityPin: hashedPin,
@@ -32,17 +45,17 @@ async function getOrCreateAdminUser(reqEmail) {
     console.log(`✅ [MongoDB Setup] Initial Admin Account created for: ${targetEmail}`);
   } else {
     let updated = false;
-    if (process.env.ADMIN_PASSWORD && !bcrypt.compareSync(configuredEnvPass, admin.password)) {
+    if (!admin.password) {
       admin.password = bcrypt.hashSync(configuredEnvPass, 10);
       updated = true;
     }
-    if (!admin.securityPin) {
-      admin.securityPin = bcrypt.hashSync(configuredEnvPin, 10);
+    if (!admin.adminId) {
+      admin.adminId = 'admin';
       updated = true;
     }
     if (updated) {
       await admin.save();
-      console.log(`🔒 [MongoDB Sync] Admin password/PIN updated in MongoDB.`);
+      console.log(`🔒 [MongoDB Sync] Missing Admin default fields populated.`);
     }
   }
 
@@ -200,77 +213,76 @@ exports.setupAdmin = async (req, res) => {
  * POST /api/auth/login
  */
 exports.login = async (req, res) => {
-  const { password, email } = req.body;
+  const { password, email, adminId } = req.body;
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown IP';
   const userAgent = req.headers['user-agent'] || 'Unknown Browser / Device';
 
-  const passwordReceived = !!(password && password.trim() !== '');
+  const rawInput = (email || adminId || '').toString().trim();
+  const rawPassword = (password || '').toString().trim();
+
+  if (!rawInput || !rawPassword) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid Admin ID or Password',
+    });
+  }
 
   try {
-    const admin = await getOrCreateAdminUser(email);
-    const adminFound = !!admin;
-    const passwordHashExists = !!(admin && admin.password);
+    const admin = await getOrCreateAdminUser(rawInput);
 
-    if (!passwordReceived) {
-      return res.status(400).json({
+    // Verify user exists, has a password hash, and has 'admin' role
+    if (!admin || !admin.password || (admin.role && admin.role !== 'admin')) {
+      return res.status(401).json({
         success: false,
-        message: 'Password is required.',
+        message: 'Invalid Admin ID or Password',
       });
     }
 
-    const cleanPassword = password.trim();
+    const cleanPassword = rawPassword;
     let isMatch = false;
+    const storedHash = admin.password.trim();
 
-    if (adminFound && passwordHashExists) {
-      isMatch = await bcrypt.compare(cleanPassword, admin.password);
-      if (!isMatch) {
-        const envDefaultPass = process.env.ADMIN_PASSWORD;
-        if (envDefaultPass && cleanPassword === envDefaultPass.trim()) {
-          isMatch = true;
-          admin.password = await bcrypt.hash(cleanPassword, 10);
-          await admin.save();
-        }
+    if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$') || storedHash.startsWith('$2y$')) {
+      isMatch = await bcrypt.compare(cleanPassword, storedHash);
+    } else {
+      isMatch = (cleanPassword === storedHash);
+      if (isMatch) {
+        admin.password = await bcrypt.hash(cleanPassword, 10);
+        await admin.save();
       }
     }
 
-    console.log(`Admin found: ${adminFound}`);
-    console.log(`Password hash exists: ${passwordHashExists}`);
-    console.log(`Password received: ${passwordReceived}`);
-    console.log(`Password comparison result: ${isMatch}`);
-
-    if (isMatch) {
-      const accessToken = jwt.sign(
-        { id: admin._id, email: admin.email, scope: 'data-entry-authorized', role: 'admin' },
-        JWT_SECRET,
-        { expiresIn: '2h' }
-      );
-
-      return res.json({
-        success: true,
-        message: 'Login successful',
-        accessToken,
-      });
-    } else {
+    if (!isMatch) {
       await SecurityAttempt.create({
         attemptType: 'WRONG_PASSWORD',
         ipAddress,
         userAgent,
-        message: `Incorrect password attempt for admin email: ${admin ? admin.email : 'Unknown'}`,
-      });
-
-      sendSecurityAlertEmail({
-        attemptType: 'WRONG_PASSWORD',
-        ipAddress,
-        userAgent,
-        time: new Date(),
-        details: `An incorrect password entry was detected on Litra King website from IP (${ipAddress}). Access has been denied.`,
-      }).catch((err) => console.error('Alert email dispatch error:', err.message));
+        message: `Incorrect password attempt for admin input: ${rawInput}`,
+      }).catch(() => null);
 
       return res.status(401).json({
         success: false,
-        message: 'Incorrect Password. Access Denied!',
+        message: 'Invalid Admin ID or Password',
       });
     }
+
+    const accessToken = jwt.sign(
+      {
+        id: admin._id,
+        email: admin.email,
+        adminId: admin.adminId || 'admin',
+        scope: 'data-entry-authorized',
+        role: 'admin',
+      },
+      JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Admin login verified successfully',
+      accessToken,
+    });
   } catch (err) {
     console.error('Login processing error:', err.message);
     return res.status(500).json({
