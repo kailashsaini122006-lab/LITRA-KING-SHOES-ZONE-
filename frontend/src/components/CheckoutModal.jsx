@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, ShieldCheck, MapPin, Truck, AlertCircle, RefreshCw, Lock, Zap, QrCode, Smartphone, CheckSquare, Square, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle2, ShieldCheck, MapPin, Truck, AlertCircle, RefreshCw, Lock, Zap, QrCode, Smartphone, CheckSquare, Square, AlertTriangle, Plus, Minus } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { getApiUrl } from '../config/api';
 import paytmQrAsset from '../assets/paytm_qr.jpg';
@@ -15,7 +15,15 @@ const INITIAL_FORM = {
 };
 
 export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
-  const { cartItems, getCartSubtotal, clearCart } = useCart();
+  const {
+    checkoutMode,
+    getCheckoutItems,
+    getCheckoutSubtotal,
+    getCheckoutCount,
+    updateQuantity,
+    updateBuyNowQuantity,
+    clearCheckout,
+  } = useCart();
 
   const [formData, setFormData] = useState(INITIAL_FORM);
   const [paymentMethod, setPaymentMethod] = useState('UPI'); // 'UPI' | 'COD'
@@ -35,9 +43,18 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   if (!isOpen) return null;
 
-  const subtotal = getCartSubtotal();
+  const checkoutItems = getCheckoutItems();
+  const subtotal = getCheckoutSubtotal();
   const deliveryCharge = subtotal >= 1000 || subtotal === 0 ? 0 : 99;
   const grandTotal = subtotal + deliveryCharge;
+
+  const handleUpdateQuantity = (itemKey, delta) => {
+    if (checkoutMode === 'single') {
+      updateBuyNowQuantity(delta);
+    } else {
+      updateQuantity(itemKey, delta);
+    }
+  };
 
   const handleFormChange = (field, val) => {
     setFormData((prev) => ({ ...prev, [field]: val }));
@@ -72,8 +89,8 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       return false;
     }
 
-    if (cartItems.length === 0) {
-      setErrorMessage('Your shopping cart is empty.');
+    if (checkoutItems.length === 0) {
+      setErrorMessage('No items selected for checkout.');
       return false;
     }
 
@@ -148,7 +165,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       pincode: cleanPincode,
     };
 
-    const payloadItems = cartItems.map((item) => ({
+    const payloadItems = checkoutItems.map((item) => ({
       productId: item.productId,
       name: item.name,
       price: item.price,
@@ -166,6 +183,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
         body: JSON.stringify({
           customer: payloadCustomer,
           items: payloadItems,
+          subtotal: subtotal,
+          deliveryCharge: deliveryCharge,
+          totalAmount: grandTotal,
           paymentMethod: paymentMethod === 'UPI' ? 'UPI' : 'COD',
         }),
       });
@@ -173,7 +193,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       const data = await res.json().catch(() => null);
 
       if (res.ok && data && data.success) {
-        clearCart();
+        clearCheckout();
         setFormData(INITIAL_FORM);
         setLocationCoords(null);
         setLocationSuccess('');
@@ -510,23 +530,55 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           {/* Right Column: Order Summary & Action Buttons */}
           <div className="lg:col-span-5 bg-zinc-950/70 border border-zinc-800 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
             <div className="space-y-4">
-              <h4 className="text-xs font-extrabold text-white uppercase tracking-wider border-b border-zinc-800 pb-2">
-                Order Summary ({cartItems.length} items)
+              <h4 className="text-xs font-extrabold text-white uppercase tracking-wider border-b border-zinc-800 pb-2 flex items-center justify-between">
+                <span>Order Summary ({getCheckoutCount()} {getCheckoutCount() === 1 ? 'item' : 'items'})</span>
+                {checkoutMode === 'single' && (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-extrabold uppercase">
+                    Buy Now Item
+                  </span>
+                )}
               </h4>
 
               {/* Items List */}
               <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
-                {cartItems.map((item) => (
-                  <div key={item.key} className="flex items-center gap-3 text-xs border-b border-zinc-800/60 pb-2.5">
-                    <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-cover bg-zinc-900 border border-zinc-800" />
-                    <div className="flex-1">
-                      <div className="font-bold text-white leading-snug line-clamp-1">{item.name}</div>
-                      <div className="text-[11px] text-zinc-400">
-                        Size: <span className="text-amber-400 font-mono font-bold">{item.size}</span> | Color: {item.color} | Qty: {item.quantity}
+                {checkoutItems.map((item) => (
+                  <div key={item.key || item.productId} className="flex items-center gap-3 text-xs border-b border-zinc-800/60 pb-2.5">
+                    <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-cover bg-zinc-900 border border-zinc-800 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-white leading-snug truncate">{item.name}</div>
+                      <div className="text-[11px] text-zinc-400 flex items-center gap-1.5 flex-wrap mt-0.5">
+                        <span>Size: <strong className="text-amber-400 font-mono">{item.size}</strong></span>
+                        <span>|</span>
+                        <span>Color: <strong className="text-zinc-200">{item.color}</strong></span>
                       </div>
                     </div>
-                    <div className="font-mono font-bold text-amber-400">
-                      ₹{item.price * item.quantity}
+
+                    {/* Quantity Controls & Dynamic Item Price */}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQuantity(item.key, -1)}
+                          disabled={item.quantity <= 1}
+                          className="p-1 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
+                          title="Decrease quantity"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="px-2 font-mono text-xs font-bold text-amber-400">{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQuantity(item.key, 1)}
+                          disabled={item.stock !== undefined && item.quantity >= item.stock}
+                          className="p-1 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
+                          title="Increase quantity"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="font-mono font-bold text-amber-400 text-xs">
+                        ₹{item.price * item.quantity}
+                      </div>
                     </div>
                   </div>
                 ))}

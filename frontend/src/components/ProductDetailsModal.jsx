@@ -3,11 +3,10 @@ import { X, Star, ShoppingBag, Zap, ShieldCheck, Truck, Check, Minus, Plus, Aler
 import { useCart } from '../context/CartContext';
 
 export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow }) {
-  const { addToCart } = useCart();
+  const { addToCart, startBuyNow } = useCart();
 
   const [selectedImage, setSelectedImage] = useState('');
   const [selectedSize, setSelectedSize] = useState(8);
-  const [selectedColor, setSelectedColor] = useState('Black');
   const [quantity, setQuantity] = useState(1);
   const [addedMessage, setAddedMessage] = useState(false);
 
@@ -16,7 +15,6 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
       const defaultImg = Array.isArray(product.images) && product.images.length ? product.images[0] : (product.img || '');
       setSelectedImage(defaultImg);
       setSelectedSize(Array.isArray(product.sizes) && product.sizes.length ? product.sizes[0] : 8);
-      setSelectedColor(Array.isArray(product.colors) && product.colors.length ? product.colors[0] : 'Black');
       setQuantity(1);
       setAddedMessage(false);
     }
@@ -29,23 +27,24 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
     : [product.img || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80'];
 
   const sizesList = Array.isArray(product.sizes) && product.sizes.length > 0 ? product.sizes : [6, 7, 8, 9, 10];
-  const colorsList = Array.isArray(product.colors) && product.colors.length > 0 ? product.colors : ['Black', 'White', 'Red'];
 
-  const isOutOfStock = product.stock !== undefined && product.stock <= 0;
-  const discountPercent = product.originalPrice && product.originalPrice > product.price
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-    : 35;
+  const sellPrice = product.price || 850;
+  const origPrice = product.originalPrice || 1999;
+  const isOutOfStock = product.inStock === false || (product.stock !== undefined && product.stock <= 0);
+  const discountPercent = origPrice > sellPrice
+    ? Math.round(((origPrice - sellPrice) / origPrice) * 100)
+    : 57;
 
   const handleAddToCart = () => {
     if (isOutOfStock) return;
-    addToCart(product, selectedSize, selectedColor, quantity);
+    addToCart(product, selectedSize, '', quantity);
     setAddedMessage(true);
     setTimeout(() => setAddedMessage(false), 2000);
   };
 
   const handleBuyNowClick = () => {
     if (isOutOfStock) return;
-    addToCart(product, selectedSize, selectedColor, quantity);
+    startBuyNow(product, selectedSize, '', quantity, selectedImage);
     onClose();
     if (onBuyNow) onBuyNow();
   };
@@ -137,9 +136,9 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
               <div className="p-4 bg-zinc-950/80 border border-zinc-800 rounded-2xl flex items-center justify-between">
                 <div>
                   <div className="flex items-baseline gap-3">
-                    <span className="text-3xl font-black text-amber-400 font-mono">₹{product.price}</span>
-                    {product.originalPrice && (
-                      <span className="text-base text-zinc-500 line-through font-mono">₹{product.originalPrice}</span>
+                    <span className="text-3xl font-black text-amber-400 font-mono">₹{sellPrice}</span>
+                    {origPrice && (
+                      <span className="text-base text-zinc-500 line-through font-mono">₹{origPrice}</span>
                     )}
                   </div>
                   <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">Inclusive of all taxes &amp; charges</p>
@@ -189,8 +188,6 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
               </div>
 
 
-
-              {/* Quantity Selector */}
               <div className="flex items-center gap-4 pt-1">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Quantity:</span>
                 <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-1">

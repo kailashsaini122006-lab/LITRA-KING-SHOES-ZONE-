@@ -2,6 +2,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { List, X, RefreshCw, ShieldCheck, Package, DollarSign, Truck, Clock, CheckCircle2, XCircle, Search, Eye, Filter, ArrowUpDown, Trash2, MapPin, AlertTriangle } from 'lucide-react';
 import { getApiUrl } from '../config/api';
 
+const getOrderPriceBreakdown = (ord) => {
+  if (!ord) return { subtotal: 0, deliveryCharge: 0, grandTotal: 0 };
+  const subtotal = ord.subtotal !== undefined && ord.subtotal !== null
+    ? Number(ord.subtotal)
+    : (Array.isArray(ord.items) ? ord.items.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0) : Number(ord.totalAmount || 0));
+  const deliveryCharge = ord.deliveryCharge !== undefined && ord.deliveryCharge !== null
+    ? Number(ord.deliveryCharge)
+    : (ord.totalAmount !== undefined && ord.totalAmount !== null ? Math.max(0, Number(ord.totalAmount) - subtotal) : (subtotal >= 1000 || subtotal === 0 ? 0 : 99));
+  const grandTotal = ord.totalAmount !== undefined && ord.totalAmount !== null
+    ? Number(ord.totalAmount)
+    : (subtotal + deliveryCharge);
+  return { subtotal, deliveryCharge, grandTotal };
+};
+
 export default function DataEntryModal({ isOpen, onClose, accessToken }) {
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'inquiries'
 
@@ -398,35 +412,53 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/60 bg-zinc-900/40">
-                        {orders.map((ord) => (
-                          <tr key={ord._id} className="hover:bg-zinc-800/40 transition-colors group">
-                            <td className="px-4 py-3.5 font-mono font-black text-amber-400 whitespace-nowrap">
-                              #{ord.orderId}
-                            </td>
+                        {orders.map((ord) => {
+                          const { subtotal, deliveryCharge, grandTotal } = getOrderPriceBreakdown(ord);
+                          return (
+                            <tr key={ord._id} className="hover:bg-zinc-800/40 transition-colors group">
+                              <td className="px-4 py-3.5 font-mono font-black text-amber-400 whitespace-nowrap">
+                                #{ord.orderId}
+                              </td>
 
-                            <td className="px-4 py-3.5 max-w-xs">
-                              <div className="font-bold text-white text-sm">{ord.customer?.name}</div>
-                              <div className="text-amber-400 font-semibold font-mono">+91 {ord.customer?.phone}</div>
-                              <div className="text-zinc-400 text-[11px] truncate" title={`${ord.customer?.address}, ${ord.customer?.city}`}>
-                                {ord.customer?.city}, {ord.customer?.pincode}
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-3.5 max-w-xs space-y-1">
-                              {ord.items?.map((item, idx) => (
-                                <div key={idx} className="flex items-center gap-2 text-[11px]">
-                                  <span className="font-semibold text-zinc-200 truncate max-w-[130px]">{item.name}</span>
-                                  <span className="bg-zinc-950 text-amber-400 border border-zinc-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                                    Size {item.size}
-                                  </span>
-                                  <span className="text-zinc-400">x{item.quantity}</span>
+                              <td className="px-4 py-3.5 max-w-xs">
+                                <div className="font-bold text-white text-sm">{ord.customer?.name}</div>
+                                <div className="text-amber-400 font-semibold font-mono">+91 {ord.customer?.phone}</div>
+                                <div className="text-zinc-400 text-[11px] truncate" title={`${ord.customer?.address}, ${ord.customer?.city}`}>
+                                  {ord.customer?.city}, {ord.customer?.pincode}
                                 </div>
-                              ))}
-                            </td>
+                              </td>
 
-                            <td className="px-4 py-3.5 font-mono font-black text-amber-400 text-sm whitespace-nowrap">
-                              ₹{ord.totalAmount}
-                            </td>
+                              <td className="px-4 py-3.5 max-w-xs space-y-1">
+                                {ord.items?.map((item, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 text-[11px]">
+                                    <span className="font-semibold text-zinc-200 truncate max-w-[130px]">{item.name}</span>
+                                    <span className="bg-zinc-950 text-amber-400 border border-zinc-800 px-1.5 py-0.5 rounded font-mono font-bold">
+                                      Size {item.size}
+                                    </span>
+                                    <span className="text-zinc-400">x{item.quantity}</span>
+                                  </div>
+                                ))}
+                              </td>
+
+                              {/* Price Breakdown Column */}
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <div className="space-y-0.5 text-xs font-mono">
+                                  <div className="flex justify-between gap-3 text-zinc-400 text-[11px]">
+                                    <span>Product Price:</span>
+                                    <span className="font-semibold text-zinc-200">₹{subtotal}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-3 text-zinc-400 text-[11px]">
+                                    <span>Delivery Charge:</span>
+                                    <span className="font-semibold text-zinc-200">
+                                      {deliveryCharge === 0 ? <span className="text-emerald-400 font-bold font-sans">FREE</span> : `₹${deliveryCharge}`}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between gap-3 text-amber-400 font-black text-xs border-t border-zinc-800/80 pt-0.5">
+                                    <span>Grand Total:</span>
+                                    <span>₹{grandTotal}</span>
+                                  </div>
+                                </div>
+                              </td>
 
                             <td className="px-4 py-3.5 whitespace-nowrap space-y-1">
                               <div className="font-bold text-white">{ord.paymentMethod}</div>
@@ -487,60 +519,76 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                               </div>
                             </td>
                           </tr>
-                        ))}
+                        );
+                      })}
                       </tbody>
                     </table>
                   </div>
 
                   {/* MOBILE CARDS VIEW (block md:hidden) */}
                   <div className="block md:hidden space-y-4">
-                    {orders.map((ord) => (
-                      <div
-                        key={ord._id}
-                        className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3 shadow-md"
-                      >
-                        <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                          <span className="font-mono font-black text-amber-400 text-base">#{ord.orderId}</span>
-                          <span className="text-[11px] font-mono text-zinc-400">
-                            {new Date(ord.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
-                          </span>
-                        </div>
-
-                        <div className="space-y-1 text-xs">
-                          <div className="font-extrabold text-white text-sm">{ord.customer?.name}</div>
-                          <div className="text-amber-400 font-mono font-bold">+91 {ord.customer?.phone}</div>
-                          <div className="text-zinc-400 text-[11px]">{ord.customer?.address}, {ord.customer?.city}</div>
-                        </div>
-
-                        {/* Items list */}
-                        <div className="bg-zinc-900/60 p-2.5 rounded-xl space-y-1.5 text-xs">
-                          {ord.items?.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-[11px]">
-                              <span className="text-zinc-200 font-semibold truncate max-w-[180px]">{item.name}</span>
-                              <span className="text-amber-400 font-mono">UK {item.size} x{item.quantity}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Amount & Status Dropdown */}
-                        <div className="flex items-center justify-between pt-1">
-                          <div>
-                            <span className="text-[10px] text-zinc-400 uppercase block">Grand Total</span>
-                            <span className="font-mono font-black text-amber-400 text-sm">₹{ord.totalAmount}</span>
+                    {orders.map((ord) => {
+                      const { subtotal, deliveryCharge, grandTotal } = getOrderPriceBreakdown(ord);
+                      return (
+                        <div
+                          key={ord._id}
+                          className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3 shadow-md"
+                        >
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                            <span className="font-mono font-black text-amber-400 text-base">#{ord.orderId}</span>
+                            <span className="text-[11px] font-mono text-zinc-400">
+                              {new Date(ord.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
+                            </span>
                           </div>
 
-                          <select
-                            value={ord.orderStatus}
-                            onChange={(e) => handleUpdateOrderStatus(ord.orderId, e.target.value, null)}
-                            className="bg-zinc-900 border border-amber-500/50 text-amber-400 font-bold text-xs rounded-xl px-3 py-2 focus:outline-none"
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="Shipped">Shipped</option>
-                            <option value="Delivered">Delivered</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
-                        </div>
+                          <div className="space-y-1 text-xs">
+                            <div className="font-extrabold text-white text-sm">{ord.customer?.name}</div>
+                            <div className="text-amber-400 font-mono font-bold">+91 {ord.customer?.phone}</div>
+                            <div className="text-zinc-400 text-[11px]">{ord.customer?.address}, {ord.customer?.city}</div>
+                          </div>
+
+                          {/* Items list */}
+                          <div className="bg-zinc-900/60 p-2.5 rounded-xl space-y-1.5 text-xs">
+                            {ord.items?.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-[11px]">
+                                <span className="text-zinc-200 font-semibold truncate max-w-[180px]">{item.name}</span>
+                                <span className="text-amber-400 font-mono">UK {item.size} x{item.quantity}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Price Breakdown Box */}
+                          <div className="p-2.5 bg-zinc-900/70 border border-zinc-800 rounded-xl space-y-1 text-[11px] font-mono">
+                            <div className="flex justify-between text-zinc-400">
+                              <span>Product Price:</span>
+                              <span className="text-zinc-200 font-semibold">₹{subtotal}</span>
+                            </div>
+                            <div className="flex justify-between text-zinc-400">
+                              <span>Delivery Charge:</span>
+                              <span className="text-zinc-200 font-semibold">
+                                {deliveryCharge === 0 ? <span className="text-emerald-400 font-bold font-sans">FREE</span> : `₹${deliveryCharge}`}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-zinc-800 pt-1 font-mono font-extrabold text-amber-400 text-xs">
+                              <span>Grand Total:</span>
+                              <span>₹{grandTotal}</span>
+                            </div>
+                          </div>
+
+                          {/* Status Dropdown */}
+                          <div className="flex items-center justify-between pt-1">
+                            <select
+                              value={ord.orderStatus}
+                              onChange={(e) => handleUpdateOrderStatus(ord.orderId, e.target.value, null)}
+                              className="w-full bg-zinc-900 border border-amber-500/50 text-amber-400 font-bold text-xs rounded-xl px-3 py-2 focus:outline-none"
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Confirmed">Confirmed</option>
+                              <option value="Shipped">Shipped</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                          </div>
 
                         {/* Action buttons */}
                         <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-2">
@@ -559,7 +607,7 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                           </button>
                         </div>
                       </div>
-                    ))}
+                      ); })}
                   </div>
                 </>
               )}
@@ -739,26 +787,31 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
               </div>
 
               {/* Financial Breakdown */}
-              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2">
-                <div className="flex justify-between text-zinc-400">
-                  <span>Subtotal</span>
-                  <span className="font-mono font-bold text-zinc-200">₹{selectedAdminOrder.subtotal}</span>
-                </div>
-                <div className="flex justify-between text-zinc-400">
-                  <span>Delivery Charge</span>
-                  <span className="font-mono font-bold text-zinc-200">
-                    {selectedAdminOrder.deliveryCharge === 0 ? <span className="text-emerald-400">FREE</span> : `₹${selectedAdminOrder.deliveryCharge}`}
-                  </span>
-                </div>
-                <div className="flex justify-between text-zinc-400">
-                  <span>Payment Method</span>
-                  <span className="font-bold text-white">{selectedAdminOrder.paymentMethod}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t border-zinc-800 text-sm font-black text-white">
-                  <span>Grand Total Amount</span>
-                  <span className="font-mono text-amber-400 text-base">₹{selectedAdminOrder.totalAmount}</span>
-                </div>
-              </div>
+              {(() => {
+                const { subtotal, deliveryCharge, grandTotal } = getOrderPriceBreakdown(selectedAdminOrder);
+                return (
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2">
+                    <div className="flex justify-between text-zinc-400">
+                      <span>Product Price (Subtotal)</span>
+                      <span className="font-mono font-bold text-zinc-200">₹{subtotal}</span>
+                    </div>
+                    <div className="flex justify-between text-zinc-400">
+                      <span>Delivery Charge</span>
+                      <span className="font-mono font-bold text-zinc-200">
+                        {deliveryCharge === 0 ? <span className="text-emerald-400 font-bold">FREE</span> : `₹${deliveryCharge}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-zinc-400">
+                      <span>Payment Method</span>
+                      <span className="font-bold text-white">{selectedAdminOrder.paymentMethod}</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-zinc-800 text-sm font-black text-white">
+                      <span>Grand Total Amount</span>
+                      <span className="font-mono text-amber-400 text-base">₹{grandTotal}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
 

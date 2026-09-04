@@ -3,7 +3,7 @@ import { ShoppingBag, X, Trash2, Plus, Minus, ArrowRight, ShieldCheck, Truck } f
 import { useCart } from '../context/CartContext';
 
 export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
-  const { cartItems, removeFromCart, updateQuantity, getCartSubtotal, getCartCount, clearCart } = useCart();
+  const { cartItems, removeFromCart, updateQuantity, getCartSubtotal, getCartCount, clearCart, startCartCheckout } = useCart();
 
   if (!isOpen) return null;
 
@@ -175,6 +175,7 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
               {/* Checkout Action Button */}
               <button
                 onClick={() => {
+                  startCartCheckout();
                   onClose();
                   if (onProceedToCheckout) onProceedToCheckout();
                 }}

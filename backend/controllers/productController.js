@@ -1,177 +1,90 @@
 const Product = require('../models/Product');
 
-// Default initial footwear product dataset
+// Default initial footwear product dataset (4 Nitro Running Shoes)
 const DEFAULT_PRODUCTS = [
   {
-    productId: 'LK-SP-001',
-    name: 'Air Max Pro Sport Shoes',
-    brand: 'LITRA KING',
-    category: 'Sports Shoes',
-    description: 'High performance athletic shoes with ultra-grip cushioning, breathable mesh, and flexible soles for workouts, running, and active wear.',
-    price: 1499,
-    originalPrice: 2499,
-    images: [
-      'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1608231387042-66d1773070a5?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=800&q=80',
-    ],
-    sizes: [6, 7, 8, 9, 10],
-    colors: ['Red', 'Black', 'White'],
-    stock: 20,
-    rating: 4.9,
-    tag: 'Top Rated',
-    isFeatured: true,
-  },
-  {
-    productId: 'LK-SN-002',
-    name: 'Streetwear Urban Edition Sneakers',
-    brand: 'LITRA KING',
-    category: 'Sneakers',
-    description: 'Modern street style sneakers crafted with premium synthetic leather, lightweight shock-absorbing insoles, and trendy high-top finish.',
-    price: 850,
-    originalPrice: 2833,
-    images: [
-      '/assets/white-air-sneaker.png',
-    ],
-    sizes: [6, 7, 8, 9, 10],
-    colors: ['White/Black', 'Grey', 'Full Black'],
-    stock: 18,
-    rating: 4.8,
-    tag: 'Best Wholesale Seller',
-    isFeatured: true,
-  },
-  {
-    productId: 'LK-CS-003',
-    name: 'Comfort Soft Casual Loafers',
-    brand: 'LITRA KING',
-    category: 'Casual Shoes',
-    description: 'Ultra lightweight daily casual walk shoes designed for effortless slip-on comfort, all-day cushioning, and casual office or outing wear.',
-    price: 1299,
-    originalPrice: 1999,
-    images: [
-      'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?auto=format&fit=crop&w=800&q=80',
-    ],
-    sizes: [7, 8, 9, 10],
-    colors: ['Brown', 'Tan', 'Navy Blue'],
-    stock: 25,
-    rating: 4.7,
-    tag: 'Wholesale Favorite',
-    isFeatured: true,
-  },
-  {
-    productId: 'LK-RN-004',
-    name: 'FlyRunner Cushion Marathon Shoes',
+    productId: 'LK-NTR-001',
+    name: 'Black & White Nitro Running Shoe',
     brand: 'LITRA KING',
     category: 'Running Shoes',
-    description: 'Professional marathon running footwear featuring energy-returning foam midsole, arch support, and anti-slip rubber outsole.',
-    price: 1699,
-    originalPrice: 2799,
-    images: [
-      'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?auto=format&fit=crop&w=800&q=80',
-    ],
+    description: 'High-performance athletic running footwear featuring responsive Nitro foam cushioning, breathable mesh upper, and anti-slip rubber outsole.',
+    price: 850,
+    originalPrice: 1999,
+    images: ['/assets/nitro-black-white.jpg'],
     sizes: [6, 7, 8, 9, 10],
-    colors: ['Neon Green', 'Blue', 'Black'],
-    stock: 15,
+    colors: [],
+    stock: 25,
+    inStock: true,
     rating: 4.9,
-    tag: 'Pro Runner Choice',
+    tag: 'WHOLESALE FAVORITE',
     isFeatured: true,
   },
   {
-    productId: 'LK-FM-005',
-    name: 'Royal Heritage Leather Formal Shoes',
+    productId: 'LK-NTR-002',
+    name: 'Grey/Yellow Nitro Running Shoe',
     brand: 'LITRA KING',
-    category: 'Formal Shoes',
-    description: 'Classic Oxford handcrafted formal shoes with sleek gloss finish, cushioned heel padding, and timeless wedding/office elegance.',
-    price: 2199,
-    originalPrice: 3499,
-    images: [
-      'https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?auto=format&fit=crop&w=800&q=80',
-    ],
+    category: 'Running Shoes',
+    description: 'Vibrant electric yellow highlight running footwear with high rebound Nitro foam technology, ergonomic heel support, and flexible tread.',
+    price: 850,
+    originalPrice: 1999,
+    images: ['/assets/nitro-grey-yellow.jpg'],
     sizes: [6, 7, 8, 9, 10],
-    colors: ['Black', 'Dark Brown'],
-    stock: 12,
+    colors: [],
+    stock: 20,
+    inStock: true,
     rating: 4.8,
-    tag: 'Premium Leather',
+    tag: 'WHOLESALE FAVORITE',
     isFeatured: true,
   },
   {
-    productId: 'LK-SL-006',
-    name: 'UltraSoft Ortho Cushion Slippers',
+    productId: 'LK-NTR-003',
+    name: 'White/Turquoise Nitro Running Shoe',
     brand: 'LITRA KING',
-    category: 'Slippers',
-    description: 'Orthopedic memory foam slides and slippers designed for home comfort, anti-skid bathroom safety, and daily indoor relaxing.',
-    price: 599,
-    originalPrice: 999,
-    images: [
-      'https://images.unsplash.com/photo-1603808033192-082d6919d3e1?auto=format&fit=crop&w=800&q=80',
-    ],
+    category: 'Running Shoes',
+    description: 'Clean crisp white and bright turquoise edition athletic shoes with energy returning Nitro foam midsole and breathable airflow mesh.',
+    price: 850,
+    originalPrice: 1999,
+    images: ['/assets/nitro-white-turquoise.jpg'],
     sizes: [6, 7, 8, 9, 10],
-    colors: ['Grey', 'Black', 'Blue'],
-    stock: 30,
-    rating: 4.6,
-    tag: 'Daily Comfort',
-    isFeatured: false,
-  },
-  {
-    productId: 'LK-SD-007',
-    name: 'Sturdy Outdoor Leather Strap Sandals',
-    brand: 'LITRA KING',
-    category: 'Sandals',
-    description: 'Rugged outdoor casual sandals with adjustable velcro straps, reinforced toe bumpers, and weather-resistant flexible soles.',
-    price: 999,
-    originalPrice: 1599,
-    images: [
-      'https://images.unsplash.com/photo-1607522370275-f14206abe5d3?auto=format&fit=crop&w=800&q=80',
-    ],
-    sizes: [7, 8, 9, 10],
-    colors: ['Brown', 'Camel', 'Black'],
+    colors: [],
     stock: 22,
-    rating: 4.7,
-    tag: 'All Terrain',
-    isFeatured: false,
+    inStock: true,
+    rating: 4.9,
+    tag: 'WHOLESALE FAVORITE',
+    isFeatured: true,
   },
   {
-    productId: 'LK-KD-008',
-    name: 'Vibrant Light-Up Kids Sneakers',
+    productId: 'LK-NTR-004',
+    name: 'Red/Black Nitro Sport Edition',
     brand: 'LITRA KING',
-    category: 'Kids Footwear',
-    description: 'Fun, safe, and flexible footwear for growing children featuring soft non-toxic padding, easy velcro enclosure, and durable rubber soles.',
-    price: 799,
-    originalPrice: 1299,
-    images: [
-      'https://images.unsplash.com/photo-1514989940723-e8e51635b782?auto=format&fit=crop&w=800&q=80',
-    ],
-    sizes: [1, 2, 3, 4, 5],
-    colors: ['Red/Yellow', 'Blue/White'],
-    stock: 16,
+    category: 'Running Shoes',
+    description: 'Aggressive crimson red and black edition athletic shoes featuring Nitro Elite foam energy core and metallic silver side accents.',
+    price: 850,
+    originalPrice: 1999,
+    images: ['/assets/nitro-red-black.jpg'],
+    sizes: [6, 7, 8, 9, 10],
+    colors: [],
+    stock: 18,
+    inStock: true,
     rating: 4.9,
-    tag: 'Kids Special',
-    isFeatured: false,
+    tag: 'WHOLESALE FAVORITE',
+    isFeatured: true,
   },
 ];
 
 /**
- * Seed initial products if DB is empty
+ * Seed initial products if DB is empty, or ensure 3 Nitro shoes exist
  */
 async function seedProductsIfEmpty() {
   try {
-    const count = await Product.countDocuments();
-    if (count === 0) {
-      await Product.insertMany(DEFAULT_PRODUCTS);
-      console.log('🛍️  [MongoDB Seed] Successfully auto-seeded initial Litra King Footwear Products collection!');
-    } else {
-      // Ensure product LK-SN-002 is updated if already seeded
+    for (const prod of DEFAULT_PRODUCTS) {
       await Product.updateOne(
-        { productId: 'LK-SN-002' },
-        {
-          $set: {
-            price: 850,
-            originalPrice: 2833,
-            images: ['/assets/white-air-sneaker.png']
-          }
-        }
+        { productId: prod.productId },
+        { $set: prod },
+        { upsert: true }
       );
     }
+    console.log('🛍️  [MongoDB Seed] Verified & synced 3 Nitro Running Shoes in database.');
   } catch (err) {
     console.error('❌  [Product Seeding Error]:', err.message);
   }

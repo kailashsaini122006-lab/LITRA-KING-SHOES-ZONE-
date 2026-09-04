@@ -57,13 +57,17 @@ const productSchema = new mongoose.Schema(
       default: [6, 7, 8, 9, 10],
     },
     colors: {
-      type: [String],
+      type: mongoose.Schema.Types.Mixed,
       default: ['Black', 'White', 'Navy Blue'],
     },
     stock: {
       type: Number,
       default: 25,
       min: 0,
+    },
+    inStock: {
+      type: Boolean,
+      default: true,
     },
     rating: {
       type: Number,

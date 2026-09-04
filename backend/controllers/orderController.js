@@ -311,7 +311,7 @@ exports.verifyRazorpayPayment = async (req, res) => {
  */
 exports.createOrder = async (req, res) => {
   try {
-    const { customer, items, paymentMethod } = req.body;
+    const { customer, items, paymentMethod, deliveryCharge: reqDeliveryCharge } = req.body;
 
     if (!customer || !customer.name || !customer.phone || !customer.address || !customer.city || !customer.pincode) {
       return res.status(400).json({
@@ -403,7 +403,9 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    const deliveryCharge = calculatedSubtotal >= 1000 ? 0 : 99;
+    const deliveryCharge = (reqDeliveryCharge !== undefined && reqDeliveryCharge !== null && !isNaN(Number(reqDeliveryCharge)))
+      ? Number(reqDeliveryCharge)
+      : (calculatedSubtotal >= 1000 ? 0 : 99);
     const grandTotal = calculatedSubtotal + deliveryCharge;
     const orderId = await generateOrderId();
 
@@ -688,7 +690,18 @@ exports.getOrderMetrics = async (req, res) => {
       cancelledOrders: allOrders.filter((o) => o.orderStatus === 'Cancelled').length,
       totalSales: allOrders
         .filter((o) => o.orderStatus !== 'Cancelled')
-        .reduce((sum, o) => sum + (o.totalAmount || 0), 0),
+        .reduce((sum, o) => {
+          if (o.totalAmount !== undefined && o.totalAmount !== null) {
+            return sum + Number(o.totalAmount);
+          }
+          const sub = o.subtotal !== undefined && o.subtotal !== null
+            ? Number(o.subtotal)
+            : (Array.isArray(o.items) ? o.items.reduce((s, i) => s + (Number(i.price) * Number(i.quantity)), 0) : 0);
+          const del = o.deliveryCharge !== undefined && o.deliveryCharge !== null
+            ? Number(o.deliveryCharge)
+            : (sub >= 1000 || sub === 0 ? 0 : 99);
+          return sum + (sub + del);
+        }, 0),
     };
 
     return res.json({
