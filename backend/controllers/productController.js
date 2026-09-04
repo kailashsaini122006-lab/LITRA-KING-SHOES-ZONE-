@@ -1,6 +1,6 @@
 const Product = require('../models/Product');
 
-// Default initial footwear product dataset (4 Nitro Running Shoes)
+// Default initial footwear product dataset (3 Nitro Running Shoes)
 const DEFAULT_PRODUCTS = [
   {
     productId: 'LK-NTR-001',
@@ -8,9 +8,9 @@ const DEFAULT_PRODUCTS = [
     brand: 'LITRA KING',
     category: 'Running Shoes',
     description: 'High-performance athletic running footwear featuring responsive Nitro foam cushioning, breathable mesh upper, and anti-slip rubber outsole.',
-    price: 850,
+    price: 999,
     originalPrice: 1999,
-    images: ['/assets/nitro-black-white.jpg'],
+    images: ['/assets/real-nitro-black-white.jpg'],
     sizes: [6, 7, 8, 9, 10],
     colors: [],
     stock: 25,
@@ -25,9 +25,9 @@ const DEFAULT_PRODUCTS = [
     brand: 'LITRA KING',
     category: 'Running Shoes',
     description: 'Vibrant electric yellow highlight running footwear with high rebound Nitro foam technology, ergonomic heel support, and flexible tread.',
-    price: 850,
+    price: 999,
     originalPrice: 1999,
-    images: ['/assets/nitro-grey-yellow.jpg'],
+    images: ['/assets/real-nitro-grey-yellow.jpg'],
     sizes: [6, 7, 8, 9, 10],
     colors: [],
     stock: 20,
@@ -42,9 +42,9 @@ const DEFAULT_PRODUCTS = [
     brand: 'LITRA KING',
     category: 'Running Shoes',
     description: 'Clean crisp white and bright turquoise edition athletic shoes with energy returning Nitro foam midsole and breathable airflow mesh.',
-    price: 850,
+    price: 999,
     originalPrice: 1999,
-    images: ['/assets/nitro-white-turquoise.jpg'],
+    images: ['/assets/real-nitro-white-turquoise.jpg'],
     sizes: [6, 7, 8, 9, 10],
     colors: [],
     stock: 22,
@@ -53,34 +53,44 @@ const DEFAULT_PRODUCTS = [
     tag: 'WHOLESALE FAVORITE',
     isFeatured: true,
   },
-  {
-    productId: 'LK-NTR-004',
-    name: 'Red/Black Nitro Sport Edition',
-    brand: 'LITRA KING',
-    category: 'Running Shoes',
-    description: 'Aggressive crimson red and black edition athletic shoes featuring Nitro Elite foam energy core and metallic silver side accents.',
-    price: 850,
-    originalPrice: 1999,
-    images: ['/assets/nitro-red-black.jpg'],
-    sizes: [6, 7, 8, 9, 10],
-    colors: [],
-    stock: 18,
-    inStock: true,
-    rating: 4.9,
-    tag: 'WHOLESALE FAVORITE',
-    isFeatured: true,
-  },
 ];
 
 /**
- * Seed initial products if DB is empty, or ensure 3 Nitro shoes exist
+ * Seed initial products if DB is empty, or ensure Nitro shoes exist
  */
 async function seedProductsIfEmpty() {
   try {
+    // 1. Remove extra 4th Nitro product to maintain exactly 3 cards
+    await Product.deleteMany({ productId: 'LK-NTR-004' });
+
+    // 2. Check all existing products in DB for missing or invalid originalPrice / price
+    const existingProducts = await Product.find({}).lean();
+    for (const prod of existingProducts) {
+      const orig = Number(prod.originalPrice);
+      const prc = Number(prod.price);
+      const isPriceValid = typeof prod.price === 'number' && !isNaN(prc) && prc >= 0;
+      const isOrigValid = typeof prod.originalPrice === 'number' && !isNaN(orig) && orig > 0;
+
+      if (!isOrigValid || !isPriceValid) {
+        const validPrice = isPriceValid ? prc : 999;
+        const validOriginalPrice = isOrigValid ? orig : Math.round(validPrice * 1.4);
+        await Product.updateOne(
+          { _id: prod._id },
+          { $set: { price: validPrice, originalPrice: validOriginalPrice } }
+        );
+      }
+    }
+
+    // 3. Upsert the 3 Nitro products with price 999 & originalPrice 1999
     for (const prod of DEFAULT_PRODUCTS) {
+      const cleanProd = {
+        ...prod,
+        price: 999,
+        originalPrice: 1999,
+      };
       await Product.updateOne(
-        { productId: prod.productId },
-        { $set: prod },
+        { productId: cleanProd.productId },
+        { $set: cleanProd },
         { upsert: true }
       );
     }
@@ -185,6 +195,19 @@ exports.createProduct = async (req, res) => {
       });
     }
 
+    const numPrice = Number(price);
+    if (isNaN(numPrice) || numPrice < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Price must be a valid number.',
+      });
+    }
+
+    let numOriginalPrice = originalPrice !== undefined && originalPrice !== null && originalPrice !== '' ? Number(originalPrice) : NaN;
+    if (isNaN(numOriginalPrice) || numOriginalPrice <= 0) {
+      numOriginalPrice = Math.round(numPrice * 1.4);
+    }
+
     const productId = 'LK-' + Math.random().toString(36).substring(2, 7).toUpperCase();
 
     const product = await Product.create({
@@ -193,12 +216,12 @@ exports.createProduct = async (req, res) => {
       brand: brand || 'LITRA KING',
       category,
       description,
-      price: Number(price),
-      originalPrice: originalPrice ? Number(originalPrice) : Math.round(Number(price) * 1.4),
+      price: numPrice,
+      originalPrice: numOriginalPrice,
       images: Array.isArray(images) && images.length ? images : ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80'],
       sizes: Array.isArray(sizes) ? sizes : [6, 7, 8, 9, 10],
       colors: Array.isArray(colors) ? colors : ['Black', 'White'],
-      stock: stock !== undefined ? Number(stock) : 25,
+      stock: stock !== undefined && !isNaN(Number(stock)) ? Number(stock) : 25,
       isFeatured: !!isFeatured,
     });
 
@@ -223,7 +246,27 @@ exports.createProduct = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const product = await Product.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    const updateData = { ...req.body };
+
+    if (updateData.price !== undefined) {
+      const numPrice = Number(updateData.price);
+      if (!isNaN(numPrice) && numPrice >= 0) {
+        updateData.price = numPrice;
+      } else {
+        delete updateData.price;
+      }
+    }
+
+    if (updateData.originalPrice !== undefined) {
+      const numOriginal = Number(updateData.originalPrice);
+      if (!isNaN(numOriginal) && numOriginal > 0) {
+        updateData.originalPrice = numOriginal;
+      } else {
+        delete updateData.originalPrice;
+      }
+    }
+
+    const product = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
 
     if (!product) {
       return res.status(404).json({

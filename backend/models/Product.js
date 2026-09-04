@@ -45,7 +45,10 @@ const productSchema = new mongoose.Schema(
     originalPrice: {
       type: Number,
       default: function () {
-        return Math.round(this.price * 1.4);
+        if (this && typeof this.price === 'number' && !isNaN(this.price) && this.price > 0) {
+          return Math.round(this.price * 1.4);
+        }
+        return undefined;
       },
     },
     images: {

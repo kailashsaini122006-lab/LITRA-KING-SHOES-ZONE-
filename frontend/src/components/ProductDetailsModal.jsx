@@ -35,15 +35,25 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
     ? Math.round(((origPrice - sellPrice) / origPrice) * 100)
     : 57;
 
+  const [unavailableAlert, setUnavailableAlert] = useState(false);
+
   const handleAddToCart = () => {
-    if (isOutOfStock) return;
+    if (isOutOfStock) {
+      setUnavailableAlert(true);
+      setTimeout(() => setUnavailableAlert(false), 3000);
+      return;
+    }
     addToCart(product, selectedSize, '', quantity);
     setAddedMessage(true);
     setTimeout(() => setAddedMessage(false), 2000);
   };
 
   const handleBuyNowClick = () => {
-    if (isOutOfStock) return;
+    if (isOutOfStock) {
+      setUnavailableAlert(true);
+      setTimeout(() => setUnavailableAlert(false), 3000);
+      return;
+    }
     startBuyNow(product, selectedSize, '', quantity, selectedImage);
     onClose();
     if (onBuyNow) onBuyNow();
@@ -213,6 +223,12 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
 
             {/* Bottom Action Buttons */}
             <div className="space-y-3 pt-4 border-t border-zinc-800">
+              {unavailableAlert && (
+                <div className="p-3 bg-red-950/90 border border-red-500/80 rounded-xl text-red-300 text-xs sm:text-sm text-center font-extrabold animate-bounce flex items-center justify-center gap-2 shadow-xl">
+                  <AlertCircle className="w-4.5 h-4.5 text-red-400" /> <span>Product Available Nahi Hai! (Out of Stock)</span>
+                </div>
+              )}
+
               {addedMessage && (
                 <div className="p-2.5 bg-emerald-950/80 border border-emerald-500/60 rounded-xl text-emerald-300 text-xs text-center font-bold animate-fadeIn flex items-center justify-center gap-2">
                   <Check className="w-4 h-4" /> Added to Cart Successfully!

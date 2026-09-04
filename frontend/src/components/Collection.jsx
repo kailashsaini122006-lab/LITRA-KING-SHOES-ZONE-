@@ -11,9 +11,9 @@ const DEFAULT_PRODUCTS = [
     brand: 'LITRA KING',
     category: 'Running Shoes',
     description: 'High-performance athletic running footwear featuring responsive Nitro foam cushioning, breathable mesh upper, and anti-slip rubber outsole.',
-    price: 850,
+    price: 999,
     originalPrice: 1999,
-    images: ['/assets/nitro-black-white.jpg'],
+    images: ['/assets/real-nitro-black-white.jpg'],
     sizes: [6, 7, 8, 9, 10],
     stock: 25,
     inStock: true,
@@ -28,9 +28,9 @@ const DEFAULT_PRODUCTS = [
     brand: 'LITRA KING',
     category: 'Running Shoes',
     description: 'Vibrant electric yellow highlight running footwear with high rebound Nitro foam technology, ergonomic heel support, and flexible tread.',
-    price: 850,
+    price: 999,
     originalPrice: 1999,
-    images: ['/assets/nitro-grey-yellow.jpg'],
+    images: ['/assets/real-nitro-grey-yellow.jpg'],
     sizes: [6, 7, 8, 9, 10],
     stock: 20,
     inStock: true,
@@ -45,28 +45,11 @@ const DEFAULT_PRODUCTS = [
     brand: 'LITRA KING',
     category: 'Running Shoes',
     description: 'Clean crisp white and bright turquoise edition athletic shoes with energy returning Nitro foam midsole and breathable airflow mesh.',
-    price: 850,
+    price: 999,
     originalPrice: 1999,
-    images: ['/assets/nitro-white-turquoise.jpg'],
+    images: ['/assets/real-nitro-white-turquoise.jpg'],
     sizes: [6, 7, 8, 9, 10],
     stock: 22,
-    inStock: true,
-    rating: 4.9,
-    tag: 'WHOLESALE FAVORITE',
-    isFeatured: true,
-  },
-  {
-    _id: 'prod-ntr-004',
-    productId: 'LK-NTR-004',
-    name: 'Red/Black Nitro Sport Edition',
-    brand: 'LITRA KING',
-    category: 'Running Shoes',
-    description: 'Aggressive crimson red and black edition athletic shoes featuring Nitro Elite foam energy core and metallic silver side accents.',
-    price: 850,
-    originalPrice: 1999,
-    images: ['/assets/nitro-red-black.jpg'],
-    sizes: [6, 7, 8, 9, 10],
-    stock: 18,
     inStock: true,
     rating: 4.9,
     tag: 'WHOLESALE FAVORITE',
@@ -81,6 +64,15 @@ export default function Collection({ onProductSelect }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addedId, setAddedId] = useState(null);
+  const [stockOverrides, setStockOverrides] = useState({});
+
+  const toggleStockAvailability = (e, itemKey, defaultAvailable) => {
+    e.stopPropagation();
+    setStockOverrides((prev) => {
+      const current = prev[itemKey] !== undefined ? prev[itemKey] : defaultAvailable;
+      return { ...prev, [itemKey]: !current };
+    });
+  };
 
   const categories = [
     'All',
@@ -125,10 +117,15 @@ export default function Collection({ onProductSelect }) {
     fetchProducts();
   }, [fetchProducts]);
 
-  const handleQuickAdd = (e, item) => {
+  const [toastMessage, setToastMessage] = useState('');
+
+  const handleQuickAdd = (e, item, isAvailable) => {
     e.stopPropagation();
-    const isAvailable = item.inStock !== false && (item.stock === undefined || item.stock > 0);
-    if (!isAvailable) return;
+    if (!isAvailable) {
+      setToastMessage(`❌ "${item.name}" — Product Available Nahi Hai!`);
+      setTimeout(() => setToastMessage(''), 3500);
+      return;
+    }
 
     const itemKey = item.productId || item._id;
     const defaultImg = Array.isArray(item.images) && item.images.length ? item.images[0] : (item.img || '/assets/nitro-black-white.jpg');
@@ -141,6 +138,14 @@ export default function Collection({ onProductSelect }) {
 
   return (
     <section id="collection" className="py-20 bg-zinc-900/40 relative">
+      {/* Toast Alert Message Popup */}
+      {toastMessage && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-red-950 border-2 border-red-500 text-white font-extrabold px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce max-w-md w-11/12 text-center justify-center">
+          <AlertCircle className="w-6 h-6 text-red-400 shrink-0" />
+          <span className="text-xs sm:text-sm leading-tight">{toastMessage}</span>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
@@ -186,10 +191,12 @@ export default function Collection({ onProductSelect }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
             {products.map((item) => {
               const itemKey = item.productId || item._id;
-              const isAvailable = item.inStock !== false && (item.stock === undefined || item.stock > 0);
+              const defaultAvailable = item.inStock !== false && (item.stock === undefined || item.stock > 0);
+              const isAvailable = stockOverrides[itemKey] !== undefined ? stockOverrides[itemKey] : defaultAvailable;
+
               const displayImg = Array.isArray(item.images) && item.images.length ? item.images[0] : (item.img || '/assets/nitro-black-white.jpg');
               
-              const sellPrice = item.price || 850;
+              const sellPrice = item.price || 999;
               const origPrice = item.originalPrice || 1999;
               const discountPercent = origPrice > sellPrice
                 ? Math.round(((origPrice - sellPrice) / origPrice) * 100)
@@ -198,9 +205,9 @@ export default function Collection({ onProductSelect }) {
               return (
                 <div
                   key={itemKey}
-                  onClick={() => onProductSelect({ ...item, images: [displayImg] })}
+                  onClick={() => onProductSelect({ ...item, images: [displayImg], inStock: isAvailable })}
                   className={`bg-zinc-900 border rounded-3xl overflow-hidden transition-all duration-300 hover:-translate-y-1 shadow-2xl flex flex-col group cursor-pointer ${
-                    !isAvailable ? 'border-zinc-800/80 opacity-90' : 'border-zinc-800 hover:border-amber-500/60'
+                    !isAvailable ? 'border-red-900/50 opacity-95' : 'border-zinc-800 hover:border-amber-500/60'
                   }`}
                 >
                   {/* Image Box */}
@@ -228,7 +235,7 @@ export default function Collection({ onProductSelect }) {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onProductSelect({ ...item, images: [displayImg] });
+                        onProductSelect({ ...item, images: [displayImg], inStock: isAvailable });
                       }}
                       className="absolute bottom-3 right-3 p-2 bg-zinc-900/90 hover:bg-amber-500 hover:text-zinc-950 text-white rounded-xl border border-zinc-700 transition-all shadow-lg"
                       title="Quick View Details"
@@ -255,6 +262,23 @@ export default function Collection({ onProductSelect }) {
                       <p className="text-zinc-400 text-xs leading-relaxed line-clamp-2">{item.description}</p>
                     </div>
 
+                    {/* Stock Control Toggle Button */}
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={(e) => toggleStockAvailability(e, itemKey, defaultAvailable)}
+                        className={`w-full py-1.5 px-3 rounded-xl text-[11px] font-extrabold transition-all flex items-center justify-center gap-1.5 border shadow-sm ${
+                          isAvailable
+                            ? 'bg-zinc-800/90 hover:bg-red-950/80 text-zinc-300 hover:text-red-300 border-zinc-700 hover:border-red-600'
+                            : 'bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 border-emerald-700'
+                        }`}
+                        title="Click to toggle Stock Status (In Stock <-> Unavailable)"
+                      >
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{isAvailable ? 'Mark as "Product Unavailable"' : 'Mark as "In Stock"'}</span>
+                      </button>
+                    </div>
+
                     {/* Price & Availability Stock Status */}
                     <div className="space-y-3 pt-2 border-t border-zinc-800/80">
                       <div className="flex items-baseline justify-between">
@@ -263,16 +287,37 @@ export default function Collection({ onProductSelect }) {
                           <span className="text-xs text-zinc-500 line-through font-mono">₹{origPrice}</span>
                         </div>
 
-                        {isAvailable ? (
-                          <span className="text-[10px] bg-emerald-950/90 text-emerald-400 border border-emerald-800/80 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Check className="w-3 h-3" /> In Stock
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-red-950/90 text-red-400 border border-red-800/80 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" /> Not Available
-                          </span>
-                        )}
+                        {/* Stock Badge */}
+                        <button
+                          type="button"
+                          onClick={(e) => toggleStockAvailability(e, itemKey, defaultAvailable)}
+                          title="Click to toggle availability"
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all cursor-pointer border ${
+                            isAvailable
+                              ? 'bg-emerald-950/90 text-emerald-400 border-emerald-800/80'
+                              : 'bg-red-950/90 text-red-400 border-red-800/80'
+                          }`}
+                        >
+                          {isAvailable ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span>In Stock</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="w-3 h-3 text-red-400" />
+                              <span>Out of Stock</span>
+                            </>
+                          )}
+                        </button>
                       </div>
+
+                      {!isAvailable && (
+                        <div className="bg-red-950/80 border border-red-800/60 rounded-xl p-2 text-center text-[11px] font-extrabold text-red-300 flex items-center justify-center gap-1.5 shadow-inner">
+                          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                          <span>Product Available Nahi Hai!</span>
+                        </div>
+                      )}
 
                       {/* Action Buttons */}
                       <div className="grid grid-cols-2 gap-2 pt-1">
@@ -280,7 +325,7 @@ export default function Collection({ onProductSelect }) {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onProductSelect({ ...item, images: [displayImg] });
+                            onProductSelect({ ...item, images: [displayImg], inStock: isAvailable });
                           }}
                           className="flex items-center justify-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs py-2.5 rounded-xl border border-zinc-700 transition-all"
                         >
@@ -290,11 +335,10 @@ export default function Collection({ onProductSelect }) {
 
                         <button
                           type="button"
-                          onClick={(e) => handleQuickAdd(e, item)}
-                          disabled={!isAvailable}
+                          onClick={(e) => handleQuickAdd(e, item, isAvailable)}
                           className={`flex items-center justify-center gap-1 font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md ${
                             !isAvailable
-                              ? 'bg-zinc-800 text-zinc-500 border border-zinc-800 cursor-not-allowed opacity-60'
+                              ? 'bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700'
                               : addedId === itemKey
                               ? 'bg-emerald-500 text-zinc-950'
                               : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/20'
@@ -302,7 +346,7 @@ export default function Collection({ onProductSelect }) {
                         >
                           <ShoppingBag className="w-3.5 h-3.5" />
                           <span>
-                            {!isAvailable ? 'Not Available' : addedId === itemKey ? 'Added!' : 'Add to Cart'}
+                            {addedId === itemKey ? 'Added!' : 'Add to Cart'}
                           </span>
                         </button>
                       </div>
