@@ -145,7 +145,7 @@ exports.initRazorpayOrder = async (req, res) => {
       }
 
       // ── Out-of-Stock Backend Validation ────────────────────────────────
-      if (dbProduct.inStock === false) {
+      if (dbProduct.inStock === false || (dbProduct.stock !== undefined && dbProduct.stock <= 0)) {
         return res.status(400).json({
           success: false,
           message: `"${dbProduct.name}" is currently Out of Stock. Please remove it from your cart and try again.`,
@@ -718,10 +718,27 @@ exports.getOrderById = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { orderStatus, paymentStatus, estimatedDeliveryTime, expectedDeliveryDate } = req.body;
+    let {
+      orderStatus,
+      deliveryBoyStatus,
+      paymentStatus,
+      paymentDate,
+      paymentTime,
+      estimatedDeliveryTime,
+      expectedDeliveryDate,
+    } = req.body;
+
+    // Normalize ORDER STATUS from UI labels if needed
+    if (orderStatus === 'ORDER PENDING') orderStatus = 'Pending';
+    if (orderStatus === 'ORDER CONFIRMED') orderStatus = 'Confirmed';
+
+    // Normalize PAYMENT STATUS from UI labels if needed
+    if (paymentStatus === 'COD • PENDING') paymentStatus = 'Pending';
+    if (paymentStatus === 'COD • PAID' || paymentStatus === 'ONLINE • PAID') paymentStatus = 'Paid';
 
     const validStatuses = ['Pending', 'Confirmed', 'Packed', 'Out for Delivery', 'Customer Reached', 'Shipped', 'Delivered', 'Cancelled'];
     const validPaymentStatuses = ['Pending', 'Pending Verification', 'Paid', 'Failed', 'Payment Failed', 'Payment Processing'];
+    const validDeliveryBoyStatuses = ['DELIVERY BOY PENDING', 'DELIVERY BOY RECEIVED', 'Pending', 'Received'];
 
     if (orderStatus && !validStatuses.includes(orderStatus)) {
       return res.status(400).json({
@@ -734,6 +751,13 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `Invalid payment status "${paymentStatus}".`,
+      });
+    }
+
+    if (deliveryBoyStatus && !validDeliveryBoyStatuses.includes(deliveryBoyStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid delivery boy status "${deliveryBoyStatus}".`,
       });
     }
 
@@ -780,13 +804,29 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     if (orderStatus) order.orderStatus = orderStatus;
-    if (paymentStatus) order.paymentStatus = paymentStatus;
+    if (deliveryBoyStatus) {
+      order.deliveryBoyStatus = (deliveryBoyStatus === 'DELIVERY BOY RECEIVED' || deliveryBoyStatus === 'Received')
+        ? 'DELIVERY BOY RECEIVED'
+        : 'DELIVERY BOY PENDING';
+    }
+
+    if (paymentStatus) {
+      order.paymentStatus = paymentStatus;
+      if (paymentStatus === 'Paid') {
+        if (!order.paidAt) order.paidAt = new Date();
+      }
+    }
+
+    if (paymentDate !== undefined) order.paymentDate = paymentDate;
+    if (paymentTime !== undefined) order.paymentTime = paymentTime;
+
     if (estimatedDeliveryTime !== undefined) order.estimatedDeliveryTime = estimatedDeliveryTime;
     if (expectedDeliveryDate !== undefined) order.expectedDeliveryDate = expectedDeliveryDate;
 
     if (order.orderStatus === 'Delivered') {
       if (order.paymentMethod === 'COD') {
         order.paymentStatus = 'Paid';
+        if (!order.paidAt) order.paidAt = new Date();
       }
       order.deliveryCompletedAt = new Date();
     }
@@ -798,11 +838,11 @@ exports.updateOrderStatus = async (req, res) => {
       await order.save();
     }
 
-    console.log(`🚚 [Admin Update] Order #${order.orderId} updated: Status = ${order.orderStatus}, Payment = ${order.paymentStatus}, DeliveryTime = ${order.estimatedDeliveryTime}`);
+    console.log(`🚚 [Admin Update] Order #${order.orderId} updated: OrderStatus=${order.orderStatus}, DeliveryBoyStatus=${order.deliveryBoyStatus}, PaymentStatus=${order.paymentStatus}`);
 
     return res.json({
       success: true,
-      message: `Order #${order.orderId} status updated to ${order.orderStatus}`,
+      message: `Order #${order.orderId} status updated successfully`,
       order,
     });
   } catch (err) {
@@ -1462,4 +1502,202 @@ exports.getOrdersReport = async (req, res) => {
     });
   }
 };
+
+/**
+ * POST /api/orders/:id/delivery-send
+ * Admin Protected: Send order package from LITRA KING Store to assigned Delivery Boy
+ */
+exports.sendOrderToDeliveryBoy = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      deliveryBoyId,
+      deliveryBoyName,
+      deliveryBoyPhone,
+      sendDate,
+      sendTime,
+    } = req.body;
+
+    if (!deliveryBoyName || !deliveryBoyName.toString().trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select or enter a Delivery Boy name.',
+      });
+    }
+
+    let order = await Order.findOne({ orderId: id.toUpperCase() });
+    if (!order && id.match(/^[0-9a-fA-F]{24}$/)) {
+      order = await Order.findById(id);
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: `Order #${id} not found in database.`,
+      });
+    }
+
+    const dObj = new Date();
+    const formattedDate = sendDate || dObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const formattedTime = sendTime || dObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    order.deliveryBoyId = deliveryBoyId || '';
+    order.deliveryBoyName = deliveryBoyName.trim();
+    order.deliveryBoyPhone = deliveryBoyPhone ? deliveryBoyPhone.trim() : '';
+    order.deliverySendStatus = 'DELIVERY SENT';
+    order.deliveryBoyStatus = 'DELIVERY SENT';
+    order.deliverySendDate = formattedDate;
+    order.deliverySendTime = formattedTime;
+    order.deliverySentAt = dObj;
+    order.deliverySource = 'LITRA KING STORE';
+
+    // Preserve payment status intact (COD remains Pending/Paid as set; Online remains Paid)
+    // Preserve order status without prematurely setting Delivered or Customer Reached
+
+    await order.save();
+
+    console.log(`🚚 [Delivery Send] Order #${order.orderId} sent to Delivery Boy ${order.deliveryBoyName} (${order.deliveryBoyPhone}) on ${formattedDate} at ${formattedTime}.`);
+
+    return res.json({
+      success: true,
+      message: `Order #${order.orderId} package sent successfully to Delivery Boy ${order.deliveryBoyName}!`,
+      order,
+    });
+  } catch (err) {
+    console.error('Error sending order to delivery boy:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to send order to delivery boy: ' + err.message,
+    });
+  }
+};
+
+/**
+ * GET /api/orders/delivery-boy/assigned
+ * Public / Delivery Endpoint: Fetch assigned orders for Delivery Boy
+ */
+exports.getAssignedOrdersForDeliveryBoy = async (req, res) => {
+  try {
+    const { deliveryBoyName, deliveryBoyPhone, deliveryBoyId, search } = req.query;
+
+    let filter = {
+      $or: [
+        { deliveryBoyStatus: 'DELIVERY SENT' },
+        { deliverySendStatus: 'DELIVERY SENT' },
+        { deliveryBoyName: { $exists: true, $ne: '' } },
+      ],
+    };
+
+    if (deliveryBoyName || deliveryBoyPhone || deliveryBoyId || search) {
+      const targetQuery = (deliveryBoyName || deliveryBoyPhone || deliveryBoyId || search || '').trim();
+      const escapedQuery = targetQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter = {
+        $and: [
+          filter,
+          {
+            $or: [
+              { deliveryBoyName: { $regex: escapedQuery, $options: 'i' } },
+              { deliveryBoyPhone: { $regex: escapedQuery, $options: 'i' } },
+              { deliveryBoyId: { $regex: escapedQuery, $options: 'i' } },
+            ],
+          },
+        ],
+      };
+    }
+
+    const rawOrders = await Order.find(filter).sort({ deliverySentAt: -1, createdAt: -1 }).lean();
+
+    const assignedOrders = rawOrders.map((ord) => {
+      let lat = ord.customer?.latitude ?? ord.latitude ?? null;
+      let lng = ord.customer?.longitude ?? ord.longitude ?? null;
+
+      if ((lat === null || lng === null) && ord.customer?.address) {
+        const match = ord.customer.address.match(/GPS Location:\s*([-\d.]+),\s*([-\d.]+)/i);
+        if (match) {
+          lat = parseFloat(match[1]);
+          lng = parseFloat(match[2]);
+        }
+      }
+
+      const shopLat = 27.1704;
+      const shopLng = 75.7225;
+
+      const cleanAddress = (ord.customer?.address || '')
+        .replace(/\(GPS Location:.*?\)/gi, '')
+        .replace(/GPS Location:.*$/gi, '')
+        .trim();
+
+      const googleMapsLocationUrl = (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
+        ? `https://www.google.com/maps?q=${lat},${lng}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${cleanAddress}, ${ord.customer?.city || ''}, ${ord.customer?.pincode || ''}`)}`;
+
+      const googleMapsDirectionsUrl = (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
+        ? `https://www.google.com/maps/dir/?api=1&origin=${shopLat},${shopLng}&destination=${lat},${lng}&travelmode=driving`
+        : `https://www.google.com/maps/dir/?api=1&origin=${shopLat},${shopLng}&destination=${encodeURIComponent(`${cleanAddress}, ${ord.customer?.city || ''}, ${ord.customer?.pincode || ''}`)}&travelmode=driving`;
+
+      return {
+        _id: ord._id,
+        orderId: ord.orderId,
+        customer: {
+          name: ord.customer?.name || '',
+          phone: ord.customer?.phone || '',
+          address: cleanAddress || ord.customer?.address || '',
+          area: ord.customer?.area || '',
+          landmark: ord.customer?.landmark || '',
+          city: ord.customer?.city || '',
+          state: ord.customer?.state || 'Rajasthan',
+          pincode: ord.customer?.pincode || '',
+          latitude: lat,
+          longitude: lng,
+        },
+        latitude: lat,
+        longitude: lng,
+        googleMapsLocationUrl,
+        googleMapsDirectionsUrl,
+        items: (ord.items || []).map((item) => ({
+          productId: item.productId,
+          name: item.name,
+          price: item.price,
+          size: item.size,
+          color: item.color,
+          quantity: item.quantity,
+          image: item.image,
+        })),
+        subtotal: ord.subtotal,
+        deliveryDistance: ord.deliveryDistance || ord.deliveryDistanceKm || 0,
+        deliveryCharge: ord.deliveryCharge || 0,
+        totalAmount: ord.totalAmount,
+        paymentMethod: ord.paymentMethod || 'COD',
+        paymentStatus: ord.paymentStatus || 'Pending',
+        orderStatus: ord.orderStatus || 'Confirmed',
+        deliveryBoyStatus: ord.deliveryBoyStatus || 'DELIVERY SENT',
+        deliverySendStatus: ord.deliverySendStatus || 'DELIVERY SENT',
+        deliveryBoyId: ord.deliveryBoyId || '',
+        deliveryBoyName: ord.deliveryBoyName || '',
+        deliveryBoyPhone: ord.deliveryBoyPhone || '',
+        deliverySendDate: ord.deliverySendDate || '',
+        deliverySendTime: ord.deliverySendTime || '',
+        deliverySource: ord.deliverySource || 'LITRA KING STORE',
+        createdAt: ord.createdAt,
+        updatedAt: ord.updatedAt,
+        estimatedDeliveryTime: ord.estimatedDeliveryTime || '',
+        expectedDeliveryDate: ord.expectedDeliveryDate || '',
+      };
+    });
+
+    return res.json({
+      success: true,
+      count: assignedOrders.length,
+      orders: assignedOrders,
+    });
+  } catch (err) {
+    console.error('Error fetching delivery boy assigned orders:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch assigned delivery orders: ' + err.message,
+    });
+  }
+};
+
+
 

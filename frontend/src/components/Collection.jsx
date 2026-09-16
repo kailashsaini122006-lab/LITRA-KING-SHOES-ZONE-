@@ -361,7 +361,7 @@ export default function Collection({ onProductSelect }) {
   const handleQuickAdd = (e, item, isAvailable) => {
     e.stopPropagation();
     if (!isAvailable) {
-      setToastMessage(`❌ "${item.name}" — Out of Stock`);
+      setToastMessage('Out of Stock');
       setTimeout(() => setToastMessage(''), 3500);
       return;
     }
@@ -691,8 +691,9 @@ export default function Collection({ onProductSelect }) {
                   key={itemKey}
                   onClick={() => {
                     if (!isAvailable) {
-                      setToastMessage(`❌ "${item.name}" — Out of Stock`);
+                      setToastMessage('Out of Stock');
                       setTimeout(() => setToastMessage(''), 3500);
+                      return;
                     }
                     onProductSelect({ ...item, images: [displayImg], inStock: isAvailable });
                   }}
@@ -737,22 +738,7 @@ export default function Collection({ onProductSelect }) {
                       <span className="text-sm">{isWishlisted ? '❤️' : '🤍'}</span>
                     </button>
 
-                    {/* ADMIN-ONLY STOCK CONTROL ICON / BUTTON (Visible ONLY to Logged-in Admin) */}
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleToggleStockAdmin(e, item)}
-                        title={isAvailable ? 'Admin Control: Click to mark Out of Stock' : 'Admin Control: Click to mark Available'}
-                        className={`absolute bottom-3 left-3 z-20 p-2 rounded-xl backdrop-blur-md font-extrabold text-[11px] uppercase tracking-wider flex items-center gap-1.5 shadow-xl border transition-all cursor-pointer ${
-                          isAvailable
-                            ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 border-amber-300'
-                            : 'bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse'
-                        }`}
-                      >
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>{isAvailable ? 'Admin: In Stock' : 'Admin: Out of Stock'}</span>
-                      </button>
-                    )}
+
 
                     {/* Quick View Floating Button */}
                     <button
@@ -843,7 +829,6 @@ export default function Collection({ onProductSelect }) {
                         <button
                           type="button"
                           onClick={(e) => handleQuickAdd(e, item, isAvailable)}
-                          disabled={!isAvailable}
                           className={`flex items-center justify-center gap-1 font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md ${
                             !isAvailable
                               ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed opacity-60'
@@ -863,7 +848,7 @@ export default function Collection({ onProductSelect }) {
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!isAvailable) {
-                              setToastMessage(`❌ "${item.name}" — Out of Stock`);
+                              setToastMessage('Out of Stock');
                               setTimeout(() => setToastMessage(''), 3500);
                               return;
                             }
@@ -872,7 +857,6 @@ export default function Collection({ onProductSelect }) {
                             startBuyNow(item, chosenSize, chosenColor, 1, displayImg);
                             onProductSelect({ ...item, images: [displayImg], inStock: isAvailable });
                           }}
-                          disabled={!isAvailable}
                           className={`flex items-center justify-center gap-1 font-black text-xs py-2.5 rounded-xl transition-all shadow-md ${
                             !isAvailable
                               ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed opacity-60'

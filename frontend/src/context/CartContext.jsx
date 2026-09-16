@@ -157,6 +157,11 @@ export function CartProvider({ children }) {
    * Start checkout for a single selected product (Buy Now)
    */
   const startBuyNow = (product, size, color, quantity = 1, imageOverride = '') => {
+    if (!product || product.inStock === false || (product.stock !== undefined && product.stock <= 0)) {
+      console.warn('Cannot purchase out of stock product:', product?.name);
+      return false;
+    }
+
     const selectedSize = Number(size) || (product.sizes ? product.sizes[0] : 8);
     const selectedColor = color || (product.colors ? product.colors[0] : 'Black');
     const selectedQty = Math.max(1, Number(quantity) || 1);
@@ -176,10 +181,12 @@ export function CartProvider({ children }) {
       color: selectedColor,
       quantity: selectedQty,
       stock: product.stock !== undefined ? product.stock : 25,
+      inStock: product.inStock !== false && (product.stock === undefined || product.stock > 0),
     };
 
     setBuyNowItem(item);
     setCheckoutMode('single');
+    return true;
   };
 
   /**
@@ -250,6 +257,11 @@ export function CartProvider({ children }) {
    * Differentiates items by (productId + size + color).
    */
   const addToCart = (product, size, color, quantity = 1) => {
+    if (!product || product.inStock === false || (product.stock !== undefined && product.stock <= 0)) {
+      console.warn('Cannot add out of stock product to cart:', product?.name);
+      return false;
+    }
+
     const selectedSize = Number(size) || (product.sizes ? product.sizes[0] : 8);
     const selectedColor = color || (product.colors ? product.colors[0] : 'Black');
     const selectedQty = Math.max(1, Number(quantity) || 1);
@@ -284,9 +296,11 @@ export function CartProvider({ children }) {
           color: selectedColor,
           quantity: selectedQty,
           stock: product.stock !== undefined ? product.stock : 25,
+          inStock: product.inStock !== false && (product.stock === undefined || product.stock > 0),
         },
       ];
     });
+    return true;
   };
 
   /**

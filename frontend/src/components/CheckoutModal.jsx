@@ -145,6 +145,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       return false;
     }
 
+    for (const item of checkoutItems) {
+      if (item.inStock === false || (item.stock !== undefined && item.stock <= 0)) {
+        setErrorMessage(`"${item.name}" is currently Out of Stock. Please remove it from your cart.`);
+        return false;
+      }
+    }
+
     return true;
   };
 

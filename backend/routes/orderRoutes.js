@@ -3,10 +3,12 @@ const router = express.Router();
 const orderController = require('../controllers/orderController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-// ── Public Customer Endpoints ────────────────────────────────────────────────
+// ── Public Customer & Delivery Boy Endpoints ─────────────────────────────────
 router.post('/', orderController.createOrder); // COD Order Placement
 router.get('/track/:id', orderController.getOrderById); // Order Tracking
 router.get('/public/:id', orderController.getOrderById);
+router.get('/delivery-boy/assigned', orderController.getAssignedOrdersForDeliveryBoy); // Assigned Orders for Delivery Boy
+
 
 // ── Public Razorpay Online Payment Endpoints ────────────────────────────────
 router.get('/razorpay-key', orderController.getRazorpayKey); // Get Public Key ID safely
@@ -17,6 +19,9 @@ router.post('/razorpay-verify', orderController.verifyRazorpayPayment); // Verif
 router.post('/:id/customer-reached', authMiddleware, orderController.markCustomerReached);
 router.post('/:id/verify-otp', authMiddleware, orderController.verifyDeliveryOtp);
 router.post('/:id/resend-otp', authMiddleware, orderController.resendDeliveryOtp);
+router.post('/:id/delivery-send', authMiddleware, orderController.sendOrderToDeliveryBoy);
+router.put('/:id/delivery-send', authMiddleware, orderController.sendOrderToDeliveryBoy);
+
 
 // ── Protected Admin Endpoints ────────────────────────────────────────────────
 router.get('/admin/metrics', authMiddleware, orderController.getOrderMetrics);

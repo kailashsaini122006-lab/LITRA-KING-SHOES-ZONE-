@@ -544,6 +544,14 @@ exports.toggleProductStock = async (req, res) => {
       product.inStock = !product.inStock;
     }
 
+    if (product.inStock) {
+      if (product.stock === undefined || product.stock <= 0) {
+        product.stock = 25;
+      }
+    } else {
+      product.stock = 0;
+    }
+
     await product.save();
 
     return res.json({

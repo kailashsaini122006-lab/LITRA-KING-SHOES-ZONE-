@@ -49,9 +49,45 @@ export default function ProductManagement({ onBack }) {
   // Delete Confirmation Modal State
   const [productToDelete, setProductToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [togglingStockId, setTogglingStockId] = useState(null);
 
   // Security Auth Token Check
   const token = sessionStorage.getItem('lk_access_token') || localStorage.getItem('lk_access_token') || '';
+
+  const handleToggleStockAdmin = async (prod) => {
+    const targetId = prod._id || prod.productId;
+    const currentAvailable = prod.inStock !== false && (prod.stock === undefined || prod.stock > 0);
+    const newInStock = !currentAvailable;
+
+    try {
+      setTogglingStockId(targetId);
+      setErrorMessage('');
+      const res = await fetch(getApiUrl(`/products/${encodeURIComponent(targetId)}/stock`), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ inStock: newInStock }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data && data.success) {
+        setSuccessMessage(`"${prod.name}" status updated to ${newInStock ? 'IN STOCK' : 'OUT OF STOCK'}.`);
+        fetchProducts();
+        window.dispatchEvent(new Event('lk_admin_stock_changed'));
+        setTimeout(() => setSuccessMessage(''), 3500);
+      } else {
+        setErrorMessage(data?.message || 'Failed to update stock status.');
+      }
+    } catch (err) {
+      console.error('Error toggling stock:', err);
+      setErrorMessage(`Error updating stock status: ${err.message}`);
+    } finally {
+      setTogglingStockId(null);
+    }
+  };
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -747,17 +783,21 @@ export default function ProductManagement({ onBack }) {
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-zinc-800 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                          isAvailable
-                            ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
-                            : 'bg-red-950 text-red-400 border-red-800'
-                        }`}
-                      >
-                        {isAvailable ? `In Stock (${prod.stock || 25})` : 'Out of Stock'}
-                      </span>
-                    </div>
+                    {/* Admin Stock Control Toggle Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStockAdmin(prod)}
+                      disabled={togglingStockId === pId}
+                      title={isAvailable ? 'Click to set OUT OF STOCK' : 'Click to set IN STOCK'}
+                      className={`py-1.5 px-3 rounded-xl font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 border transition-all cursor-pointer shadow-sm ${
+                        isAvailable
+                          ? 'bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 border-emerald-700/80 hover:border-emerald-500'
+                          : 'bg-red-950/90 hover:bg-red-900 text-red-300 border-red-700/80 hover:border-red-500 animate-pulse'
+                      }`}
+                    >
+                      <ShieldCheck className={`w-3.5 h-3.5 ${isAvailable ? 'text-emerald-400' : 'text-red-400'}`} />
+                      <span>{togglingStockId === pId ? 'SAVING...' : isAvailable ? 'IN STOCK' : 'OUT OF STOCK'}</span>
+                    </button>
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2">

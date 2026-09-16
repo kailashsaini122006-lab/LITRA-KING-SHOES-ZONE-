@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { List, X, RefreshCw, ShieldCheck, Package, DollarSign, Truck, Clock, CheckCircle2, XCircle, Search, Eye, Filter, ArrowUpDown, Trash2, MapPin, AlertTriangle, TrendingUp, Calendar, UserCheck, Mail } from 'lucide-react';
+import { List, X, RefreshCw, ShieldCheck, Package, DollarSign, Truck, Clock, CheckCircle2, XCircle, Search, Eye, Filter, ArrowUpDown, Trash2, MapPin, AlertTriangle, TrendingUp, Calendar, UserCheck, Mail, SlidersHorizontal } from 'lucide-react';
 import { getApiUrl } from '../config/api';
 import ProductManagement from '../pages/ProductManagement';
+import { SHOP_LOCATION, calculateHaversineDistance } from '../utils/deliveryUtils';
 
 function formatOrderDateTime(isoString) {
   if (!isoString) return { date: 'N/A', time: 'N/A' };
@@ -267,8 +268,305 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
   const [selectedHandoverDetail, setSelectedHandoverDetail] = useState(null);
   const [handoverModalOpen, setHandoverModalOpen] = useState(false);
 
+  // ── Combined Order & Payment Status Modal State ─────────────────────────────
+  const [statusModalOrder, setStatusModalOrder] = useState(null);
+  const [statusModalOrderStatus, setStatusModalOrderStatus] = useState('ORDER PENDING');
+  const [statusModalDeliveryBoyStatus, setStatusModalDeliveryBoyStatus] = useState('DELIVERY BOY PENDING');
+  const [statusModalPaymentStatus, setStatusModalPaymentStatus] = useState('COD • PENDING');
+  const [statusModalPaymentDate, setStatusModalPaymentDate] = useState('');
+  const [statusModalPaymentTime, setStatusModalPaymentTime] = useState('');
+  const [statusModalError, setStatusModalError] = useState('');
+  const [statusModalSaving, setStatusModalSaving] = useState(false);
+
+  // ── Admin Delivery Send Modal State ─────────────────────────────────────────
+  const [deliverySendOrder, setDeliverySendOrder] = useState(null);
+  const [deliverySendBoyId, setDeliverySendBoyId] = useState('');
+  const [deliverySendBoyName, setDeliverySendBoyName] = useState('');
+  const [deliverySendBoyPhone, setDeliverySendBoyPhone] = useState('');
+  const [deliverySendIsCustomBoy, setDeliverySendIsCustomBoy] = useState(false);
+  const [deliverySendDate, setDeliverySendDate] = useState('');
+  const [deliverySendTime, setDeliverySendTime] = useState('');
+  const [deliverySendError, setDeliverySendError] = useState('');
+  const [deliverySendSubmitting, setDeliverySendSubmitting] = useState(false);
+
+  const presetDeliveryBoys = [
+    { id: 'DB01', name: 'Ramesh Kumar', phone: '9876543210' },
+    { id: 'DB02', name: 'Suresh Singh', phone: '9876543211' },
+    { id: 'DB03', name: 'Vikram Sharma', phone: '9876543212' },
+    { id: 'DB04', name: 'Rahul Verma', phone: '9876543213' },
+  ];
+
+  const allAvailableDeliveryBoys = [
+    ...presetDeliveryBoys,
+    ...Array.from(new Set((handovers || []).map((h) => h.deliveryBoyName)))
+      .filter((name) => name && !presetDeliveryBoys.some((p) => p.name === name))
+      .map((name, idx) => {
+        const match = (handovers || []).find((h) => h.deliveryBoyName === name);
+        return {
+          id: `HO_${idx}`,
+          name,
+          phone: match?.deliveryBoyPhone || '',
+        };
+      }),
+  ];
+
+  const handleOpenDeliverySendModal = (ord) => {
+    if (!ord) return;
+    const currentOrd = orders.find((o) => o.orderId === ord.orderId || o._id === ord._id) || ord;
+    setDeliverySendOrder(currentOrd);
+    setDeliverySendError('');
+
+    if (currentOrd.deliveryBoyName) {
+      setDeliverySendBoyName(currentOrd.deliveryBoyName);
+      setDeliverySendBoyPhone(currentOrd.deliveryBoyPhone || '');
+      const match = allAvailableDeliveryBoys.find((b) => b.name === currentOrd.deliveryBoyName);
+      setDeliverySendBoyId(match ? match.id : 'CUSTOM');
+      setDeliverySendIsCustomBoy(!match);
+    } else {
+      const defaultBoy = presetDeliveryBoys[0];
+      setDeliverySendBoyName(defaultBoy.name);
+      setDeliverySendBoyPhone(defaultBoy.phone);
+      setDeliverySendBoyId(defaultBoy.id);
+      setDeliverySendIsCustomBoy(false);
+    }
+
+    const d = new Date();
+    setDeliverySendDate(d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }));
+    setDeliverySendTime(d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }));
+  };
+
+  const handleSaveDeliverySend = async () => {
+    if (!deliverySendOrder) return;
+    if (!deliverySendBoyName || !deliverySendBoyName.trim()) {
+      setDeliverySendError('Please select or enter a Delivery Boy name.');
+      return;
+    }
+
+    try {
+      setDeliverySendSubmitting(true);
+      setDeliverySendError('');
+      const token = getAuthToken();
+
+      const payload = {
+        deliveryBoyId: deliverySendBoyId,
+        deliveryBoyName: deliverySendBoyName.trim(),
+        deliveryBoyPhone: deliverySendBoyPhone ? deliverySendBoyPhone.trim() : '',
+        sendDate: deliverySendDate,
+        sendTime: deliverySendTime,
+      };
+
+      const res = await fetch(getApiUrl(`/orders/${encodeURIComponent(deliverySendOrder.orderId)}/delivery-send`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data && data.success && data.order) {
+        const updatedOrder = data.order;
+        setSuccessMessage(`Order #${deliverySendOrder.orderId} package sent successfully to Delivery Boy ${updatedOrder.deliveryBoyName}!`);
+        setTimeout(() => setSuccessMessage(''), 4000);
+
+        setOrders((prev) => prev.map((o) => (o.orderId === updatedOrder.orderId || o._id === updatedOrder._id ? updatedOrder : o)));
+        if (selectedAdminOrder && (selectedAdminOrder.orderId === updatedOrder.orderId || selectedAdminOrder._id === updatedOrder._id)) {
+          setSelectedAdminOrder(updatedOrder);
+        }
+
+        setDeliverySendOrder(null);
+        fetchOrdersAndMetrics();
+      } else {
+        setDeliverySendError(data?.message || 'Failed to send package to Delivery Boy.');
+      }
+    } catch (err) {
+      console.error('Error in handleSaveDeliverySend:', err);
+      setDeliverySendError(`Error sending to delivery boy: ${err.message}`);
+    } finally {
+      setDeliverySendSubmitting(false);
+    }
+  };
+
+
   const getAuthToken = () => {
     return accessToken || sessionStorage.getItem('lk_access_token') || localStorage.getItem('lk_access_token') || '';
+  };
+
+  const handleOpenStatusModal = (ord) => {
+    if (!ord) return;
+
+    // Retrieve fresh order object from orders state array if present
+    const currentOrd = orders.find((o) => o.orderId === ord.orderId || o._id === ord._id) || ord;
+    const isOnline = Boolean(currentOrd.paymentMethod && currentOrd.paymentMethod !== 'COD');
+
+    // 1. ORDER STATUS
+    const rawOrderStatus = (currentOrd.orderStatus || '').toString().trim();
+    const orderStat = (rawOrderStatus === 'Pending' || rawOrderStatus === 'ORDER PENDING' || !rawOrderStatus)
+      ? 'ORDER PENDING'
+      : 'ORDER CONFIRMED';
+
+    // 2. DELIVERY BOY STATUS
+    const rawDeliveryBoyStatus = (currentOrd.deliveryBoyStatus || '').toString().trim();
+    let delBoyStat = 'DELIVERY BOY PENDING';
+    if (rawDeliveryBoyStatus === 'DELIVERY BOY RECEIVED' || rawDeliveryBoyStatus === 'Received') {
+      delBoyStat = 'DELIVERY BOY RECEIVED';
+    } else if (rawDeliveryBoyStatus === 'DELIVERY BOY PENDING' || rawDeliveryBoyStatus === 'Pending') {
+      delBoyStat = 'DELIVERY BOY PENDING';
+    } else if (rawOrderStatus === 'Out for Delivery' || rawOrderStatus === 'Delivered') {
+      delBoyStat = 'DELIVERY BOY RECEIVED';
+    } else {
+      delBoyStat = 'DELIVERY BOY PENDING';
+    }
+
+    // 3. PAYMENT STATUS
+    const rawPaymentStatus = (currentOrd.paymentStatus || '').toString().trim();
+    let payStat = 'COD • PENDING';
+    if (isOnline) {
+      payStat = 'ONLINE • PAID';
+    } else if (rawPaymentStatus === 'Paid' || rawPaymentStatus === 'COD • PAID') {
+      payStat = 'COD • PAID';
+    } else {
+      payStat = 'COD • PENDING';
+    }
+
+    // 4. PAYMENT DATE & TIME
+    const now = new Date();
+    const todayIso = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const nowTime = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); // HH:MM
+
+    let pDate = currentOrd.paymentDate ? currentOrd.paymentDate.toString().trim() : '';
+    let pTime = currentOrd.paymentTime ? currentOrd.paymentTime.toString().trim() : '';
+
+    if (!pDate) {
+      if (rawPaymentStatus === 'Paid' || rawPaymentStatus === 'COD • PAID' || isOnline) {
+        const dObj = currentOrd.paidAt ? new Date(currentOrd.paidAt) : (currentOrd.createdAt ? new Date(currentOrd.createdAt) : now);
+        pDate = !isNaN(dObj.getTime()) ? dObj.toISOString().split('T')[0] : todayIso;
+      } else {
+        pDate = todayIso;
+      }
+    } else if (pDate.includes('-') && pDate.split('-')[0].length === 2) {
+      // Convert DD-MM-YYYY (e.g. 16-09-2026) to YYYY-MM-DD (2026-09-16) for HTML <input type="date">
+      const [d, m, y] = pDate.split('-');
+      pDate = `${y}-${m}-${d}`;
+    }
+
+    if (!pTime) {
+      if (rawPaymentStatus === 'Paid' || rawPaymentStatus === 'COD • PAID' || isOnline) {
+        const dObj = currentOrd.paidAt ? new Date(currentOrd.paidAt) : (currentOrd.createdAt ? new Date(currentOrd.createdAt) : now);
+        pTime = !isNaN(dObj.getTime()) ? dObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : nowTime;
+      } else {
+        pTime = nowTime;
+      }
+    } else if (pTime.includes('AM') || pTime.includes('PM')) {
+      // Convert 12h time (e.g. "08:52 AM" or "02:30 PM") to 24h format "08:52" / "14:30" for HTML <input type="time">
+      try {
+        const match = pTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (match) {
+          let h = parseInt(match[1], 10);
+          const m = match[2];
+          const ampm = match[3].toUpperCase();
+          if (ampm === 'PM' && h < 12) h += 12;
+          if (ampm === 'AM' && h === 12) h = 0;
+          pTime = `${h < 10 ? '0' + h : h}:${m}`;
+        }
+      } catch (e) {}
+    }
+
+    setStatusModalOrder(currentOrd);
+    setStatusModalOrderStatus(orderStat);
+    setStatusModalDeliveryBoyStatus(delBoyStat);
+    setStatusModalPaymentStatus(payStat);
+    setStatusModalPaymentDate(pDate);
+    setStatusModalPaymentTime(pTime);
+    setStatusModalError('');
+  };
+
+  const handleSaveStatusModal = async () => {
+    if (!statusModalOrder) return;
+    try {
+      setStatusModalSaving(true);
+      setStatusModalError('');
+
+      const isOnline = Boolean(statusModalOrder.paymentMethod && statusModalOrder.paymentMethod !== 'COD');
+
+      // Validation: Require Payment Date and Payment Time if COD payment is marked as PAID
+      if (!isOnline && statusModalPaymentStatus === 'COD • PAID') {
+        if (!statusModalPaymentDate || !statusModalPaymentDate.trim()) {
+          setStatusModalError('Please select or enter the Payment Date before saving.');
+          setStatusModalSaving(false);
+          return;
+        }
+        if (!statusModalPaymentTime || !statusModalPaymentTime.trim()) {
+          setStatusModalError('Please select or enter the Payment Time before saving.');
+          setStatusModalSaving(false);
+          return;
+        }
+      }
+
+      // Convert YYYY-MM-DD input date to DD-MM-YYYY (e.g. 16-09-2026) for display/storage
+      let formattedDate = statusModalPaymentDate;
+      if (formattedDate && formattedDate.includes('-') && formattedDate.split('-')[0].length === 4) {
+        const [y, m, d] = formattedDate.split('-');
+        formattedDate = `${d}-${m}-${y}`;
+      }
+
+      // Convert 24h HH:MM input time to 12h "08:52 AM" / "02:30 PM" format
+      let formattedTime = statusModalPaymentTime;
+      if (formattedTime && formattedTime.includes(':') && !formattedTime.includes('AM') && !formattedTime.includes('PM')) {
+        const parts = formattedTime.split(':');
+        let h = parseInt(parts[0], 10);
+        const m = parts[1] ? parts[1].substring(0, 2) : '00';
+        if (!isNaN(h)) {
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          h = h % 12 || 12;
+          const hFormatted = h < 10 ? `0${h}` : `${h}`;
+          formattedTime = `${hFormatted}:${m} ${ampm}`;
+        }
+      }
+
+      const payload = {
+        orderStatus: statusModalOrderStatus === 'ORDER PENDING' ? 'Pending' : 'Confirmed',
+        deliveryBoyStatus: statusModalDeliveryBoyStatus,
+        paymentStatus: isOnline ? 'Paid' : (statusModalPaymentStatus === 'COD • PAID' ? 'Paid' : 'Pending'),
+        paymentDate: formattedDate,
+        paymentTime: formattedTime,
+      };
+
+      const token = getAuthToken();
+      const res = await fetch(getApiUrl(`/orders/${statusModalOrder.orderId}`), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data && data.success && data.order) {
+        setSuccessMessage(`Order #${statusModalOrder.orderId} status saved successfully!`);
+        setTimeout(() => setSuccessMessage(''), 3000);
+
+        const updatedOrder = data.order;
+        setOrders(prev => prev.map(o => (o.orderId === updatedOrder.orderId || o._id === updatedOrder._id) ? updatedOrder : o));
+        if (selectedAdminOrder && (selectedAdminOrder.orderId === updatedOrder.orderId || selectedAdminOrder._id === updatedOrder._id)) {
+          setSelectedAdminOrder(updatedOrder);
+        }
+
+        setStatusModalOrder(null);
+        fetchOrdersAndMetrics();
+      } else {
+        setStatusModalError(data?.message || 'Failed to save status.');
+      }
+    } catch (err) {
+      console.error('Error saving status:', err);
+      setStatusModalError(`Error saving status: ${err.message}`);
+    } finally {
+      setStatusModalSaving(false);
+    }
   };
 
   const handleVerifyDeliveryOtpInAdmin = async (orderId, otpCode) => {
@@ -529,7 +827,13 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
       const dataOrder = await resOrder.json().catch(() => null);
 
       if (resOrder.ok && dataOrder && dataOrder.success) {
-        setOrders(dataOrder.orders || []);
+        const fetchedOrders = dataOrder.orders || [];
+        setOrders(fetchedOrders);
+        setSelectedAdminOrder((prev) => {
+          if (!prev) return null;
+          const match = fetchedOrders.find((o) => o.orderId === prev.orderId || o._id === prev._id);
+          return match || prev;
+        });
       } else {
         setErrorMessage(dataOrder?.message || 'Failed to load orders.');
       }
@@ -1353,8 +1657,8 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                           <th className="px-4 py-3.5">Customer Details</th>
                           <th className="px-4 py-3.5">Ordered Shoes</th>
                           <th className="px-4 py-3.5">Total Amount</th>
-                          <th className="px-4 py-3.5">Payment</th>
-                          <th className="px-4 py-3.5">Order Status Action</th>
+                          <th className="px-4 py-3.5">Payment Method</th>
+                          <th className="px-4 py-3.5 text-center">Order &amp; Payment Status</th>
                           <th className="px-4 py-3.5 text-right">Actions</th>
                         </tr>
                       </thead>
@@ -1362,6 +1666,7 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                         {orders.map((ord) => {
                           const { subtotal, deliveryCharge, grandTotal } = getOrderPriceBreakdown(ord);
                           const { date: orderDate, time: orderTime } = formatOrderDateTime(ord.createdAt);
+                          const isOnline = Boolean(ord.paymentMethod && ord.paymentMethod !== 'COD');
                           return (
                             <tr key={ord._id} className="hover:bg-zinc-800/40 transition-colors group">
                               <td className="px-4 py-3.5 font-mono whitespace-nowrap">
@@ -1458,69 +1763,66 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                                 </div>
                               </td>
 
-                            <td className="px-4 py-3.5 whitespace-nowrap space-y-1">
-                              <div className="font-bold text-white">{ord.paymentMethod}</div>
-                              <select
-                                value={ord.paymentStatus}
-                                onChange={(e) => handleUpdateOrderStatus(ord.orderId, null, e.target.value)}
-                                className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-zinc-950 border focus:outline-none ${
-                                  ord.paymentStatus === 'Paid'
-                                    ? 'text-emerald-400 border-emerald-800'
-                                    : ord.paymentStatus === 'Payment Failed' || ord.paymentStatus === 'Failed'
-                                    ? 'text-red-400 border-red-800'
-                                    : 'text-amber-300 border-amber-800'
-                                }`}
-                              >
-                                <option value="Pending">Pending</option>
-                                <option value="Pending Verification">Pending Verification</option>
-                                <option value="Paid">Paid</option>
-                                <option value="Payment Failed">Payment Failed</option>
-                              </select>
+                            <td className="px-4 py-3.5 whitespace-nowrap">
+                              <div className="font-bold text-white text-xs">{ord.paymentMethod}</div>
+                              <div className="text-[10px] font-mono mt-0.5">
+                                {ord.paymentStatus === 'Paid' ? (
+                                  <span className="text-emerald-400 font-bold">Paid</span>
+                                ) : (
+                                  <span className="text-amber-400 font-bold">Pending</span>
+                                )}
+                              </div>
                             </td>
 
-                            <td className="px-4 py-3.5 whitespace-nowrap">
-                              <select
-                                value={ord.orderStatus}
-                                onChange={(e) => handleUpdateOrderStatus(ord.orderId, e.target.value, null)}
-                                className={`bg-zinc-950 border font-bold text-xs rounded-xl px-3 py-1.5 focus:outline-none transition-colors ${
-                                  ord.orderStatus === 'Delivered'
-                                    ? 'text-emerald-400 border-emerald-800'
-                                    : ord.orderStatus === 'Cancelled'
-                                    ? 'text-red-400 border-red-800'
-                                    : 'text-amber-400 border-amber-500/50'
-                                }`}
-                              >
-                                <option value="Pending">Pending</option>
-                                <option value="Confirmed">Confirmed</option>
-                                <option value="Shipped">Shipped</option>
-                                <option value="Customer Reached">Customer Reached</option>
-                                <option value="Delivered">Delivered</option>
-                                <option value="Cancelled">Cancelled</option>
-                              </select>
+                            {/* UNIFIED SINGLE COMBINED CONTROL BUTTON & STATUS BADGES */}
+                            <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                              <div className="inline-flex flex-col items-center gap-1.5">
+                                <div className="flex items-center gap-1 flex-wrap justify-center">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                                    ord.orderStatus === 'Pending' || !ord.orderStatus
+                                      ? 'bg-amber-950/80 text-amber-300 border border-amber-800'
+                                      : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
+                                  }`}>
+                                    {ord.orderStatus === 'Pending' || !ord.orderStatus ? 'ORDER PENDING' : 'ORDER CONFIRMED'}
+                                  </span>
+
+                                  {(ord.deliveryBoyStatus === 'DELIVERY SENT' || ord.deliverySendStatus === 'DELIVERY SENT') && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-950/90 text-amber-400 border border-amber-600/80 shadow-sm flex items-center gap-1">
+                                      🚚 DELIVERY SENT
+                                    </span>
+                                  )}
+
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                                    ord.paymentStatus === 'Paid'
+                                      ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                                      : 'bg-amber-950/80 text-amber-300 border border-amber-800'
+                                  }`}>
+                                    {isOnline
+                                      ? (ord.paymentStatus === 'Paid' ? 'ONLINE • PAID' : 'ONLINE • PENDING')
+                                      : (ord.paymentStatus === 'Paid' ? 'COD • PAID' : 'COD • PENDING')}
+                                  </span>
+                                </div>
+
+                                <button
+                                  onClick={() => handleOpenStatusModal(ord)}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs rounded-xl shadow-md shadow-amber-500/10 transition-all flex items-center gap-1.5"
+                                  title="Manage Order Status, Delivery Boy Status & Payment Status"
+                                >
+                                  <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-950" />
+                                  <span>Order &amp; Payment Status</span>
+                                </button>
+                              </div>
                             </td>
 
                             <td className="px-4 py-3.5 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1.5">
-                                {ord.orderStatus !== 'Delivered' && ord.orderStatus !== 'Cancelled' && (
-                                  <button
-                                    onClick={() => handleMarkCustomerReachedInAdmin(ord.orderId)}
-                                    disabled={otpVerifying}
-                                    className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs rounded-lg transition-all flex items-center gap-1 shadow-md shadow-amber-500/20 disabled:opacity-50"
-                                    title="Mark Customer Reached & Send Delivery OTP via SMS"
-                                  >
-                                    <MapPin className="w-3.5 h-3.5 text-zinc-950" />
-                                    <span>{ord.orderStatus === 'Customer Reached' ? 'Resend OTP' : 'Customer Reached'}</span>
-                                  </button>
-                                )}
                                 <button
-                                  onClick={() => handleOpenWhatsAppModal(ord)}
-                                  className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-xs rounded-lg transition-all flex items-center gap-1 shadow-md shadow-emerald-600/20"
-                                  title="Customer WhatsApp Order Update"
+                                  onClick={() => handleOpenDeliverySendModal(ord)}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs rounded-xl shadow-md shadow-amber-500/10 transition-all flex items-center gap-1.5"
+                                  title="Send Package from LITRA KING Store to Delivery Boy"
                                 >
-                                  <svg className="w-3.5 h-3.5 fill-current text-white" viewBox="0 0 24 24">
-                                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l.261.417-1.152 4.208 4.309-1.129.325.171z" />
-                                  </svg>
-                                  <span>WhatsApp</span>
+                                  <Truck className="w-3.5 h-3.5 text-zinc-950" />
+                                  <span>Delivery Send</span>
                                 </button>
                                 <button
                                   onClick={() => setSelectedAdminOrder(ord)}
@@ -1637,42 +1939,26 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                             </div>
                           </div>
 
-                          {/* Status Dropdown */}
-                          <div className="flex items-center justify-between pt-1">
-                            <select
-                              value={ord.orderStatus}
-                              onChange={(e) => handleUpdateOrderStatus(ord.orderId, e.target.value, null)}
-                              className="w-full bg-zinc-900 border border-amber-500/50 text-amber-400 font-bold text-xs rounded-xl px-3 py-2 focus:outline-none"
+                          {/* Unified Order & Payment Status Button */}
+                          <div className="pt-1">
+                            <button
+                              onClick={() => handleOpenStatusModal(ord)}
+                              className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
                             >
-                              <option value="Pending">Pending</option>
-                              <option value="Confirmed">Confirmed</option>
-                              <option value="Shipped">Shipped</option>
-                              <option value="Customer Reached">Customer Reached</option>
-                              <option value="Delivered">Delivered</option>
-                              <option value="Cancelled">Cancelled</option>
-                            </select>
+                              <SlidersHorizontal className="w-4 h-4 text-zinc-950" />
+                              <span>Order &amp; Payment Status</span>
+                            </button>
                           </div>
 
                         {/* Action buttons */}
                         <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center gap-2">
-                          {ord.orderStatus !== 'Delivered' && ord.orderStatus !== 'Cancelled' && (
-                            <button
-                              onClick={() => handleMarkCustomerReachedInAdmin(ord.orderId)}
-                              disabled={otpVerifying}
-                              className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 disabled:opacity-50"
-                            >
-                              <MapPin className="w-4 h-4 text-zinc-950" />
-                              <span>{ord.orderStatus === 'Customer Reached' ? 'Resend OTP' : 'Customer Reached'}</span>
-                            </button>
-                          )}
                           <button
-                            onClick={() => handleOpenWhatsAppModal(ord)}
-                            className="flex-1 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all"
+                            onClick={() => handleOpenDeliverySendModal(ord)}
+                            className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all"
+                            title="Send Package to Delivery Boy"
                           >
-                            <svg className="w-4 h-4 fill-current text-white" viewBox="0 0 24 24">
-                              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l.261.417-1.152 4.208 4.309-1.129.325.171z" />
-                            </svg>
-                            <span>WhatsApp</span>
+                            <Truck className="w-4 h-4 text-zinc-950" />
+                            <span>Delivery Send</span>
                           </button>
                           <button
                             onClick={() => setSelectedAdminOrder(ord)}
@@ -1852,37 +2138,13 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-zinc-400 font-bold text-[11px]">Payment Status:</span>
-                    <select
-                      value={selectedAdminOrder.paymentStatus}
-                      onChange={(e) => handleUpdateOrderStatus(selectedAdminOrder.orderId, null, e.target.value)}
-                      className="bg-zinc-900 border border-zinc-700 text-white font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-400"
-                    >
-                      <option value="Pending">Pending</option>
-                      <option value="Pending Verification">Pending Verification</option>
-                      <option value="Paid">Paid</option>
-                      <option value="Payment Failed">Payment Failed</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-zinc-400 font-bold text-[11px]">Order Status:</span>
-                    <select
-                      value={selectedAdminOrder.orderStatus}
-                      onChange={(e) => handleUpdateOrderStatus(selectedAdminOrder.orderId, e.target.value, null)}
-                      className="bg-zinc-900 border border-amber-500 text-amber-400 font-bold text-xs rounded-xl px-3 py-1.5 focus:outline-none"
-                    >
-                      <option value="Pending">Pending</option>
-                      <option value="Confirmed">Confirmed</option>
-                      <option value="Packed">Packed</option>
-                      <option value="Out for Delivery">Out for Delivery</option>
-                      <option value="Customer Reached">Customer Reached</option>
-                      <option value="Shipped">Shipped</option>
-                      <option value="Delivered">Delivered</option>
-                      <option value="Cancelled">Cancelled</option>
-                    </select>
-                  </div>
+                  <button
+                    onClick={() => handleOpenStatusModal(selectedAdminOrder)}
+                    className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                  >
+                    <SlidersHorizontal className="w-4 h-4 text-zinc-950" />
+                    <span>Order &amp; Payment Status</span>
+                  </button>
                 </div>
               </div>
 
@@ -2197,6 +2459,390 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                 );
               })()}
 
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ─── ADMIN DELIVERY SEND MODAL ────────────────────────────────────────── */}
+      {deliverySendOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="relative w-full max-w-2xl bg-zinc-900 border border-amber-500/40 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 flex flex-col max-h-[92vh]">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-400">
+                  <Truck className="w-6 h-6 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-amber-400 flex items-center gap-2">
+                    🚚 Admin Delivery Send
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Hand over package from LITRA KING Store to assigned Delivery Boy
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDeliverySendOrder(null)}
+                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+                title="Close Modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh] custom-scrollbar">
+              
+              {/* Error Message */}
+              {deliverySendError && (
+                <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl text-red-200 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <span>{deliverySendError}</span>
+                </div>
+              )}
+
+              {/* 1. Visual Route & Customer GPS Location Card */}
+              {(() => {
+                const sendCoords = getOrderCoordinates(deliverySendOrder);
+                const sendCleanAddress = (deliverySendOrder.customer?.address || '')
+                  .replace(/\(GPS Location:.*?\)/gi, '')
+                  .replace(/GPS Location:.*$/gi, '')
+                  .trim();
+
+                let sendDistance = deliverySendOrder.deliveryDistance || deliverySendOrder.deliveryDistanceKm || 0;
+                if (sendCoords && sendCoords.lat && sendCoords.lng) {
+                  sendDistance = calculateHaversineDistance(SHOP_LOCATION.lat, SHOP_LOCATION.lng, sendCoords.lat, sendCoords.lng);
+                }
+
+                const mapsUrl = sendCoords
+                  ? `https://www.google.com/maps?q=${sendCoords.lat},${sendCoords.lng}`
+                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${sendCleanAddress}, ${deliverySendOrder.customer?.city || ''}, ${deliverySendOrder.customer?.pincode || ''}`)}`;
+
+                const routeUrl = sendCoords
+                  ? `https://www.google.com/maps/dir/?api=1&origin=${SHOP_LOCATION.lat},${SHOP_LOCATION.lng}&destination=${sendCoords.lat},${sendCoords.lng}&travelmode=driving`
+                  : `https://www.google.com/maps/dir/?api=1&origin=${SHOP_LOCATION.lat},${SHOP_LOCATION.lng}&destination=${encodeURIComponent(`${sendCleanAddress}, ${deliverySendOrder.customer?.city || ''}, ${deliverySendOrder.customer?.pincode || ''}`)}&travelmode=driving`;
+
+                return (
+                  <div className="p-4 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-amber-500/30 rounded-2xl space-y-3">
+                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-amber-400 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-amber-400" /> Store Package Transfer Route
+                      </span>
+                      <span className="px-2.5 py-0.5 bg-amber-950 text-amber-400 rounded-lg border border-amber-800 text-[10px] font-mono">
+                        Distance: {sendDistance > 0 ? `${sendDistance} KM` : 'Local / Std'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-5 items-center gap-2 text-center py-2 bg-zinc-950/70 rounded-xl border border-zinc-800 p-3">
+                      <div className="md:col-span-2 text-left space-y-0.5">
+                        <span className="text-[10px] text-zinc-500 block uppercase font-bold">SOURCE</span>
+                        <span className="text-xs font-black text-amber-400 flex items-center gap-1">
+                          🏪 LITRA KING STORE
+                        </span>
+                        <span className="text-[10px] text-zinc-400 block font-mono">Main Footwear Market, Chomu (303702)</span>
+                      </div>
+                      <div className="md:col-span-1 flex flex-col items-center justify-center my-1 md:my-0">
+                        <span className="text-[10px] text-amber-400 font-extrabold animate-pulse">🚚 DELIVERY ROUTE</span>
+                        <div className="w-full h-0.5 bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-500 my-1"></div>
+                      </div>
+                      <div className="md:col-span-2 text-right space-y-0.5">
+                        <span className="text-[10px] text-zinc-500 block uppercase font-bold">DESTINATION CUSTOMER</span>
+                        <span className="text-xs font-black text-emerald-400 block">
+                          🏠 {deliverySendOrder.customer?.name || 'Customer'}
+                        </span>
+                        <span className="text-[10px] text-zinc-300 block truncate" title={sendCleanAddress}>
+                          {sendCleanAddress || deliverySendOrder.customer?.city || 'Local'} (Pincode: {deliverySendOrder.customer?.pincode})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Customer GPS Location & Maps Buttons */}
+                    <div className="p-3 bg-zinc-950/80 rounded-xl border border-zinc-800 space-y-2 text-xs">
+                      {sendCoords ? (
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div>
+                            <span className="text-zinc-400 block text-[11px] font-bold">Customer GPS Location:</span>
+                            <span className="font-mono text-amber-400 font-extrabold text-xs">
+                              📍 Latitude: {sendCoords.lat} | Longitude: {sendCoords.lng}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500 hover:text-zinc-950 text-amber-400 border border-amber-500/40 rounded-xl font-bold text-xs transition-all flex items-center gap-1 shadow-sm"
+                            >
+                              <MapPin className="w-3.5 h-3.5" />
+                              <span>📍 OPEN CUSTOMER LOCATION</span>
+                            </a>
+                            <a
+                              href={routeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500 hover:text-zinc-950 text-emerald-400 border border-emerald-500/40 rounded-xl font-bold text-xs transition-all flex items-center gap-1 shadow-sm"
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                              <span>🚗 OPEN ROUTE IN GOOGLE MAPS</span>
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div>
+                            <span className="text-amber-400/90 font-bold block text-[11px]">
+                              Customer GPS location is not available for this order.
+                            </span>
+                            <span className="text-zinc-400 text-[10px] block">
+                              Address: {sendCleanAddress}, Pincode: {deliverySendOrder.customer?.pincode}
+                            </span>
+                          </div>
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-zinc-700 rounded-xl font-bold text-xs transition-all flex items-center gap-1"
+                          >
+                            <MapPin className="w-3.5 h-3.5" />
+                            <span>📍 OPEN ADDRESS IN GOOGLE MAPS</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 2. Order Information Breakdown */}
+              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
+                <h4 className="font-extrabold text-xs uppercase text-zinc-300 border-b border-zinc-800 pb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-amber-400">
+                    <Package className="w-4 h-4 text-amber-400" /> Package Order Details
+                  </span>
+                  <span className="font-mono text-amber-400">#{deliverySendOrder.orderId}</span>
+                </h4>
+
+                {(() => {
+                  const sendCoords = getOrderCoordinates(deliverySendOrder);
+                  const sendCleanAddress = (deliverySendOrder.customer?.address || '')
+                    .replace(/\(GPS Location:.*?\)/gi, '')
+                    .replace(/GPS Location:.*$/gi, '')
+                    .trim();
+                  let sendDistance = deliverySendOrder.deliveryDistance || deliverySendOrder.deliveryDistanceKm || 0;
+                  if (sendCoords && sendCoords.lat && sendCoords.lng) {
+                    sendDistance = calculateHaversineDistance(SHOP_LOCATION.lat, SHOP_LOCATION.lng, sendCoords.lat, sendCoords.lng);
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-zinc-500 text-[11px] block">Customer Name & Phone:</span>
+                        <span className="font-bold text-white block">{deliverySendOrder.customer?.name}</span>
+                        <span className="text-zinc-400 font-mono text-[11px] block">+91 {deliverySendOrder.customer?.phone}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 text-[11px] block">Customer Address & Pincode:</span>
+                        <span className="text-zinc-300 block">{sendCleanAddress || deliverySendOrder.customer?.address}</span>
+                        <span className="text-amber-400 font-mono text-[11px] font-bold block">Pincode: {deliverySendOrder.customer?.pincode}</span>
+                      </div>
+                      <div className="sm:col-span-2 border-t border-zinc-800/80 pt-2">
+                        <span className="text-zinc-500 text-[11px] block mb-1">Ordered Shoe/Product:</span>
+                        <div className="space-y-1">
+                          {Array.isArray(deliverySendOrder.items) && deliverySendOrder.items.length > 0 ? (
+                            deliverySendOrder.items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center bg-zinc-900/80 p-2 rounded-lg border border-zinc-800 text-xs">
+                                <span className="font-semibold text-zinc-200">
+                                  {item.name} <span className="text-amber-400">(Size: {item.size})</span>
+                                </span>
+                                <span className="font-mono text-zinc-400">x{item.quantity} • ₹{Number(item.price) * Number(item.quantity)}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-zinc-400 italic">LITRA KING Footwear</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-800/80 font-mono text-[11px]">
+                        <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">
+                          <span className="text-zinc-500 block text-[10px]">Payment Method:</span>
+                          <span className="font-bold text-white">{deliverySendOrder.paymentMethod || 'COD'}</span>
+                        </div>
+                        <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">
+                          <span className="text-zinc-500 block text-[10px]">Payment Status:</span>
+                          <span className={`font-bold ${deliverySendOrder.paymentStatus === 'Paid' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {deliverySendOrder.paymentMethod !== 'COD'
+                              ? (deliverySendOrder.paymentStatus === 'Paid' ? 'ONLINE • PAID' : 'ONLINE • PENDING')
+                              : (deliverySendOrder.paymentStatus === 'Paid' ? 'COD • PAID' : 'COD • PENDING')}
+                          </span>
+                        </div>
+                        <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">
+                          <span className="text-zinc-500 block text-[10px]">Delivery Distance:</span>
+                          <span className="font-bold text-zinc-200">{sendDistance > 0 ? `${sendDistance} KM` : 'Local'}</span>
+                        </div>
+                        <div className="bg-zinc-900 p-2 rounded-lg border border-zinc-800">
+                          <span className="text-zinc-500 block text-[10px]">Grand Total:</span>
+                          <span className="font-black text-amber-400 text-xs">₹{getOrderPriceBreakdown(deliverySendOrder).grandTotal}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* 3. Delivery Boy Assignment Section */}
+              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-3">
+                <h4 className="font-extrabold text-xs uppercase text-amber-400 flex items-center gap-1.5 border-b border-zinc-800 pb-2">
+                  <UserCheck className="w-4 h-4 text-amber-400" /> Assign Delivery Boy
+                </h4>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-zinc-300 block mb-1">
+                      Delivery Boy <span className="text-amber-400">*</span>
+                    </label>
+                    <select
+                      value={deliverySendIsCustomBoy ? 'CUSTOM' : deliverySendBoyId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'CUSTOM') {
+                          setDeliverySendIsCustomBoy(true);
+                          setDeliverySendBoyId('CUSTOM');
+                          setDeliverySendBoyName('');
+                          setDeliverySendBoyPhone('');
+                        } else {
+                          setDeliverySendIsCustomBoy(false);
+                          const selectedBoy = allAvailableDeliveryBoys.find((b) => b.id === val || b.name === val);
+                          if (selectedBoy) {
+                            setDeliverySendBoyId(selectedBoy.id);
+                            setDeliverySendBoyName(selectedBoy.name);
+                            setDeliverySendBoyPhone(selectedBoy.phone || '');
+                          }
+                        }
+                      }}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-xs text-white font-semibold focus:outline-none focus:border-amber-500"
+                    >
+                      <optgroup label="Standard LITRA KING Delivery Executives">
+                        {presetDeliveryBoys.map((db) => (
+                          <option key={db.id} value={db.id}>
+                            {db.name} (+91 {db.phone})
+                          </option>
+                        ))}
+                      </optgroup>
+                      {allAvailableDeliveryBoys.filter((b) => b.id.startsWith('HO_')).length > 0 && (
+                        <optgroup label="Recent Delivery Executives from Handovers">
+                          {allAvailableDeliveryBoys
+                            .filter((b) => b.id.startsWith('HO_'))
+                            .map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.name} {b.phone ? `(+91 ${b.phone})` : ''}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      <option value="CUSTOM">+ Enter New / Custom Delivery Boy</option>
+                    </select>
+                  </div>
+
+                  {deliverySendIsCustomBoy && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-zinc-900/90 border border-amber-500/30 rounded-xl">
+                      <div>
+                        <label className="text-[11px] font-bold text-zinc-400 block mb-1">
+                          Delivery Boy Name <span className="text-amber-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={deliverySendBoyName}
+                          onChange={(e) => setDeliverySendBoyName(e.target.value)}
+                          placeholder="e.g. Ramesh Kumar"
+                          className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-zinc-400 block mb-1">
+                          Delivery Boy Mobile Number
+                        </label>
+                        <input
+                          type="text"
+                          value={deliverySendBoyPhone}
+                          onChange={(e) => setDeliverySendBoyPhone(e.target.value)}
+                          placeholder="e.g. 9876543210"
+                          className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 4. Confirmation Section */}
+              <div className="p-4 bg-amber-950/40 border border-amber-500/40 rounded-2xl space-y-3">
+                <h4 className="font-extrabold text-xs uppercase text-amber-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-amber-400" /> Send this order to Delivery Boy?
+                </h4>
+                
+                <div className="p-3 bg-zinc-950/80 rounded-xl border border-amber-500/20 text-xs space-y-1.5 font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Order ID:</span>
+                    <span className="font-black text-amber-400">#{deliverySendOrder.orderId}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Customer:</span>
+                    <span className="font-bold text-white">{deliverySendOrder.customer?.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Assigned Delivery Boy:</span>
+                    <span className="font-bold text-amber-400">{deliverySendBoyName || 'None Selected'} {deliverySendBoyPhone ? `(+91 ${deliverySendBoyPhone})` : ''}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Payment Status:</span>
+                    <span className={`font-bold ${deliverySendOrder.paymentStatus === 'Paid' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {deliverySendOrder.paymentMethod !== 'COD'
+                        ? (deliverySendOrder.paymentStatus === 'Paid' ? 'ONLINE • PAID' : 'ONLINE • PENDING')
+                        : (deliverySendOrder.paymentStatus === 'Paid' ? 'COD • PAID' : 'COD • PENDING')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t border-zinc-800 pt-1.5 font-black text-amber-400">
+                    <span>Order Amount:</span>
+                    <span>₹{getOrderPriceBreakdown(deliverySendOrder).grandTotal}</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-zinc-800 bg-zinc-950">
+              <button
+                type="button"
+                onClick={() => setDeliverySendOrder(null)}
+                disabled={deliverySendSubmitting}
+                className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-extrabold text-xs rounded-xl transition-all"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDeliverySend}
+                disabled={deliverySendSubmitting}
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {deliverySendSubmitting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>SENDING...</span>
+                  </>
+                ) : (
+                  <>
+                    <Truck className="w-4 h-4 text-zinc-950" />
+                    <span>SEND TO DELIVERY BOY</span>
+                  </>
+                )}
+              </button>
             </div>
 
           </div>
@@ -2770,6 +3416,257 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* COMBINED ORDER & PAYMENT STATUS MODAL */}
+      {statusModalOrder && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative text-white max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+              <div>
+                <h3 className="text-lg font-black text-amber-400 flex items-center gap-2">
+                  <SlidersHorizontal className="w-5 h-5 text-amber-400" />
+                  Order &amp; Payment Status
+                </h3>
+                <p className="text-xs text-zinc-400 font-mono mt-0.5">
+                  Order ID: <strong className="text-white font-bold">#{statusModalOrder.orderId}</strong> | Customer: <strong className="text-zinc-200">{statusModalOrder.customer?.name}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatusModalOrder(null)}
+                className="p-2 text-zinc-400 hover:text-white rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {statusModalError && (
+              <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl text-red-300 text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{statusModalError}</span>
+              </div>
+            )}
+
+            <div className="space-y-5 text-xs">
+              {/* 1. ORDER STATUS SECTION */}
+              <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl space-y-2.5">
+                <div className="font-extrabold uppercase text-[11px] text-zinc-400 tracking-wider flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-amber-400" /> 1. ORDER STATUS
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatusModalOrderStatus('ORDER PENDING')}
+                    className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all border ${
+                      statusModalOrderStatus === 'ORDER PENDING'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500 shadow-md shadow-amber-500/10'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                    }`}
+                  >
+                    ORDER PENDING
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusModalOrderStatus('ORDER CONFIRMED')}
+                    className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all border ${
+                      statusModalOrderStatus === 'ORDER CONFIRMED'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-md shadow-emerald-500/10'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                    }`}
+                  >
+                    ORDER CONFIRMED
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. DELIVERY BOY STATUS SECTION */}
+              <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl space-y-2.5">
+                <div className="font-extrabold uppercase text-[11px] text-zinc-400 tracking-wider flex items-center gap-1.5">
+                  <Truck className="w-4 h-4 text-blue-400" /> 2. DELIVERY BOY STATUS
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatusModalDeliveryBoyStatus('DELIVERY BOY PENDING')}
+                    className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all border ${
+                      statusModalDeliveryBoyStatus === 'DELIVERY BOY PENDING'
+                        ? 'bg-zinc-800 text-amber-300 border-amber-500/50'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                    }`}
+                  >
+                    DELIVERY BOY PENDING
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusModalDeliveryBoyStatus('DELIVERY BOY RECEIVED')}
+                    className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all border ${
+                      statusModalDeliveryBoyStatus === 'DELIVERY BOY RECEIVED'
+                        ? 'bg-blue-500/20 text-blue-300 border-blue-500 shadow-md shadow-blue-500/10'
+                        : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                    }`}
+                  >
+                    DELIVERY BOY RECEIVED
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. PAYMENT STATUS SECTION */}
+              <div className="p-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl space-y-3">
+                <div className="font-extrabold uppercase text-[11px] text-zinc-400 tracking-wider flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-emerald-400" /> 3. PAYMENT STATUS ({statusModalOrder.paymentMethod || 'COD'})
+                </div>
+
+                {statusModalOrder.paymentMethod && statusModalOrder.paymentMethod !== 'COD' ? (
+                  /* ONLINE ORDER: READ ONLY / PRESERVED ONLINE PAYMENT STATUS */
+                  <div className="space-y-3">
+                    <div className="p-3 bg-emerald-950/60 border border-emerald-800 rounded-xl flex items-center justify-between">
+                      <span className="text-xs font-black text-emerald-400 uppercase tracking-wide">
+                        ONLINE • PAID
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-300/80 bg-emerald-900/40 border border-emerald-800/60 px-2 py-0.5 rounded-md">
+                        Verified Online Payment
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Payment Date</label>
+                        <input
+                          type="text"
+                          disabled
+                          value={statusModalPaymentDate ? (statusModalPaymentDate.includes('-') && statusModalPaymentDate.split('-')[0].length === 4 ? `${statusModalPaymentDate.split('-')[2]}-${statusModalPaymentDate.split('-')[1]}-${statusModalPaymentDate.split('-')[0]}` : statusModalPaymentDate) : ''}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-300 font-mono text-xs cursor-not-allowed opacity-80"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Payment Time</label>
+                        <input
+                          type="text"
+                          disabled
+                          value={statusModalPaymentTime}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-300 font-mono text-xs cursor-not-allowed opacity-80"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* COD ORDER: CAN CHANGE BETWEEN COD • PENDING & COD • PAID */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setStatusModalPaymentStatus('COD • PENDING')}
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all border ${
+                          statusModalPaymentStatus === 'COD • PENDING'
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500 shadow-md shadow-amber-500/10'
+                            : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                        }`}
+                      >
+                        COD • PENDING
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStatusModalPaymentStatus('COD • PAID')}
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all border ${
+                          statusModalPaymentStatus === 'COD • PAID'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-md shadow-emerald-500/10'
+                            : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                        }`}
+                      >
+                        COD • PAID
+                      </button>
+                    </div>
+
+                    {/* Display Payment Date & Time inputs when payment is COD • PAID */}
+                    {statusModalPaymentStatus === 'COD • PAID' && (
+                      <div className="p-3 bg-zinc-950 border border-emerald-800/60 rounded-xl space-y-3 animate-fadeIn">
+                        <div className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Enter/Select COD Payment Collection Date &amp; Time:
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">
+                              Payment Date <span className="text-amber-400">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              value={statusModalPaymentDate}
+                              onChange={(e) => setStatusModalPaymentDate(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-400 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none"
+                            />
+                            {statusModalPaymentDate && (
+                              <span className="text-[10px] text-amber-300 font-mono block mt-1">
+                                Formatted: {statusModalPaymentDate.includes('-') && statusModalPaymentDate.split('-')[0].length === 4 ? `${statusModalPaymentDate.split('-')[2]}-${statusModalPaymentDate.split('-')[1]}-${statusModalPaymentDate.split('-')[0]}` : statusModalPaymentDate}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">
+                              Payment Time <span className="text-amber-400">*</span>
+                            </label>
+                            <input
+                              type="time"
+                              value={statusModalPaymentTime}
+                              onChange={(e) => setStatusModalPaymentTime(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-400 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none"
+                            />
+                            {statusModalPaymentTime && (
+                              <span className="text-[10px] text-amber-300 font-mono block mt-1">
+                                Preview: {(() => {
+                                  if (statusModalPaymentTime.includes(':') && !statusModalPaymentTime.includes('AM') && !statusModalPaymentTime.includes('PM')) {
+                                    const parts = statusModalPaymentTime.split(':');
+                                    let h = parseInt(parts[0], 10);
+                                    const m = parts[1] ? parts[1].substring(0, 2) : '00';
+                                    if (!isNaN(h)) {
+                                      const ampm = h >= 12 ? 'PM' : 'AM';
+                                      h = h % 12 || 12;
+                                      return `${h < 10 ? '0' + h : h}:${m} ${ampm}`;
+                                    }
+                                  }
+                                  return statusModalPaymentTime;
+                                })()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 border-t border-zinc-800 pt-4">
+              <button
+                type="button"
+                onClick={() => setStatusModalOrder(null)}
+                className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs rounded-xl border border-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={statusModalSaving}
+                onClick={handleSaveStatusModal}
+                className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-50 text-zinc-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-1.5"
+              >
+                {statusModalSaving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-zinc-950" />
+                    <span>SAVE PAYMENT</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

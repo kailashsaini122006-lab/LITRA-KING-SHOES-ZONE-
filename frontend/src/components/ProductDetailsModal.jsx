@@ -268,8 +268,11 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  disabled={isOutOfStock}
-                  className="py-3.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white font-extrabold rounded-2xl text-xs sm:text-sm border border-zinc-700 transition-all flex items-center justify-center gap-2 shadow-lg"
+                  className={`py-3.5 font-extrabold rounded-2xl text-xs sm:text-sm border transition-all flex items-center justify-center gap-2 shadow-lg ${
+                    isOutOfStock
+                      ? 'bg-zinc-800 text-zinc-500 border-zinc-700/50 cursor-not-allowed opacity-60'
+                      : 'bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700'
+                  }`}
                 >
                   <ShoppingBag className="w-4 h-4 text-amber-400" />
                   <span>ADD TO CART</span>
@@ -278,8 +281,11 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
                 <button
                   type="button"
                   onClick={handleBuyNowClick}
-                  disabled={isOutOfStock}
-                  className="py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-zinc-950 font-extrabold rounded-2xl text-xs sm:text-sm transition-all shadow-lg shadow-amber-500/20 hover:scale-[1.01] flex items-center justify-center gap-2"
+                  className={`py-3.5 font-extrabold rounded-2xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-lg ${
+                    isOutOfStock
+                      ? 'bg-zinc-800 text-zinc-500 border-zinc-700/50 cursor-not-allowed opacity-60'
+                      : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/20 hover:scale-[1.01]'
+                  }`}
                 >
                   <Zap className="w-4 h-4 fill-zinc-950" />
                   <span>BUY NOW (COD)</span>
