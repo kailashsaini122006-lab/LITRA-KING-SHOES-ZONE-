@@ -1,15 +1,25 @@
 import React from 'react';
-import { ShoppingBag, X, Trash2, Plus, Minus, ArrowRight, ShieldCheck, Truck } from 'lucide-react';
+import { ShoppingBag, X, Trash2, Plus, Minus, ArrowRight, ShieldCheck, Truck, MapPin } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
-  const { cartItems, removeFromCart, updateQuantity, getCartSubtotal, getCartCount, clearCart, startCartCheckout } = useCart();
+  const {
+    cartItems,
+    removeFromCart,
+    updateQuantity,
+    getCartSubtotal,
+    getCartCount,
+    clearCart,
+    startCartCheckout,
+    deliveryDistance,
+    deliveryCharge,
+    locationLoading,
+  } = useCart();
 
   if (!isOpen) return null;
 
   const subtotal = getCartSubtotal();
-  const deliveryFee = subtotal >= 1000 || subtotal === 0 ? 0 : 99;
-  const grandTotal = subtotal + deliveryFee;
+  const grandTotal = subtotal + (deliveryCharge !== null ? deliveryCharge : 0);
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/80 backdrop-blur-sm animate-fadeIn">
@@ -145,30 +155,50 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
           {cartItems.length > 0 && (
             <div className="p-6 border-t border-zinc-800 bg-zinc-950/90 space-y-4">
               
-              <div className="space-y-2 text-xs">
+              <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between text-zinc-400">
-                  <span>Subtotal</span>
+                  <span>Product Subtotal</span>
                   <span className="font-mono font-bold text-zinc-200">₹{subtotal}</span>
                 </div>
 
-                <div className="flex justify-between text-zinc-400">
+                <div className="flex justify-between items-center text-zinc-400">
                   <span className="flex items-center gap-1">
-                    <Truck className="w-3.5 h-3.5 text-amber-400" /> Delivery Charges
+                    <MapPin className="w-3.5 h-3.5 text-red-500" />
+                    <span>Delivery Distance</span>
                   </span>
-                  <span className="font-mono font-bold text-zinc-200">
-                    {deliveryFee === 0 ? <span className="text-emerald-400">FREE</span> : `₹${deliveryFee}`}
+                  <span className="font-mono font-bold text-amber-400">
+                    {locationLoading ? (
+                      <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
+                    ) : deliveryDistance !== null ? (
+                      `${deliveryDistance} km`
+                    ) : (
+                      <span className="text-[11px] text-amber-400/90 font-sans font-normal">Pending Location</span>
+                    )}
                   </span>
                 </div>
 
-                {subtotal < 1000 && (
-                  <p className="text-[10px] text-amber-400/90 italic">
-                    Add ₹{1000 - subtotal} more for FREE delivery!
-                  </p>
-                )}
+                <div className="flex justify-between items-center text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Delivery Charge</span>
+                  </span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {locationLoading ? (
+                      <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
+                    ) : deliveryCharge !== null ? (
+                      `₹${deliveryCharge}`
+                    ) : (
+                      <span className="text-[11px] text-amber-400/90 font-sans font-normal">Pending Location</span>
+                    )}
+                  </span>
+                </div>
 
                 <div className="pt-2 border-t border-zinc-800 flex justify-between text-base font-extrabold text-white">
                   <span>Total Amount</span>
-                  <span className="font-mono text-amber-400 text-lg">₹{grandTotal}</span>
+                  <span className="font-mono text-amber-400 text-lg">
+                    ₹{grandTotal}
+                    {deliveryCharge === null && <span className="text-[10px] text-zinc-500 block font-normal font-sans text-right">+ Delivery Fee</span>}
+                  </span>
                 </div>
               </div>
 

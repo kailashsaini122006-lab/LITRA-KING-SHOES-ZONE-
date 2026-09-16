@@ -59,8 +59,10 @@ export default function OrderTrackingModal({ isOpen, onClose, initialOrderId }) 
   const STEPS = [
     { key: 'Pending', label: 'Order Placed', desc: 'Order received & saved' },
     { key: 'Confirmed', label: 'Confirmed', desc: 'Order verified by Litra King' },
-    { key: 'Shipped', label: 'Shipped', desc: 'Dispatched with courier' },
-    { key: 'Delivered', label: 'Delivered', desc: 'Handed over to customer' },
+    { key: 'Packed', label: 'Packed', desc: 'Packed & ready to dispatch' },
+    { key: 'Out for Delivery', label: 'Out for Delivery', desc: 'With delivery executive' },
+    { key: 'Customer Reached', label: 'Customer Reached', desc: 'Arrived at location' },
+    { key: 'Delivered', label: 'Delivered', desc: 'Verified via OTP & delivered' },
   ];
 
   const getStepStatus = (stepKey) => {
@@ -70,8 +72,11 @@ export default function OrderTrackingModal({ isOpen, onClose, initialOrderId }) 
     const orderRank = {
       Pending: 1,
       Confirmed: 2,
-      Shipped: 3,
-      Delivered: 4,
+      Packed: 3,
+      Shipped: 4,
+      'Out for Delivery': 4,
+      'Customer Reached': 5,
+      Delivered: 6,
     };
 
     return (orderRank[orderStatus] || 1) >= (orderRank[stepKey] || 1);
@@ -255,9 +260,15 @@ export default function OrderTrackingModal({ isOpen, onClose, initialOrderId }) 
                     </span>
                   </div>
                   <div className="flex justify-between text-zinc-400">
+                    <span>Delivery Distance:</span>
+                    <span className="font-mono font-bold text-amber-300">
+                      {order.deliveryDistance ? `${order.deliveryDistance} km (Chomu store)` : 'Standard'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-zinc-400">
                     <span>Delivery Fee:</span>
-                    <span className="font-mono font-bold text-zinc-200">
-                      {order.deliveryCharge === 0 ? <span className="text-emerald-400">FREE</span> : `₹${order.deliveryCharge}`}
+                    <span className="font-mono font-bold text-emerald-400">
+                      ₹{order.deliveryCharge ?? 0}
                     </span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-zinc-800 text-sm font-black text-white">

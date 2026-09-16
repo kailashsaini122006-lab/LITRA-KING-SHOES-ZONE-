@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -90,22 +89,6 @@ body {
   background: linear-gradient(135deg, #ffffff 0%, #fca5a5 40%, #ef4444 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-}
-
-/* Custom Pulsing Animation */
-@keyframes pulse-glow {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
-  }
-  50% {
-    transform: scale(1.03);
-    box-shadow: 0 0 30px rgba(239, 68, 68, 0.8);
-  }
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2.5s infinite ease-in-out;
 }
 
 /* Hide scrollbar utility */

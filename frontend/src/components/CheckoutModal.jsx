@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { X, CheckCircle2, ShieldCheck, MapPin, Truck, AlertCircle, RefreshCw, Lock, Zap, QrCode, Smartphone, CheckSquare, Square, AlertTriangle, Plus, Minus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, CheckCircle2, ShieldCheck, MapPin, Truck, AlertCircle, RefreshCw, Lock, Zap, QrCode, Smartphone, CheckSquare, Square, AlertTriangle, Plus, Minus, Navigation } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { getApiUrl } from '../config/api';
 import paytmQrAsset from '../assets/paytm_qr.jpg';
+import { calculateCustomerDeliveryDistance, calculateDeliveryChargeFromDistance, SHOP_LOCATION } from '../utils/deliveryUtils';
 
 const INITIAL_FORM = {
   name: '',
@@ -10,7 +11,6 @@ const INITIAL_FORM = {
   email: '',
   address: '',
   city: '',
-  state: 'Rajasthan',
   pincode: '',
 };
 
@@ -23,6 +23,17 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
     updateQuantity,
     updateBuyNowQuantity,
     clearCheckout,
+    deliveryDistance,
+    deliveryCharge,
+    locationLoading,
+    locationSuccess,
+    locationError,
+    locationCoords,
+    detectLocation,
+    updateDeliveryFromPincode,
+    setLocationSuccess,
+    setLocationError,
+    setLocationCoords,
   } = useCart();
 
   const [formData, setFormData] = useState(INITIAL_FORM);
@@ -30,23 +41,58 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Location (GPS) State
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationSuccess, setLocationSuccess] = useState('');
-  const [locationError, setLocationError] = useState('');
-  const [locationCoords, setLocationCoords] = useState(null);
-
   // UPI Specific State
   const [hasClickedCompletedPayment, setHasClickedCompletedPayment] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [userConfirmedPayment, setUserConfirmedPayment] = useState(false);
 
+  // Safe setter helper to avoid ReferenceError/TypeError
+  const safeSetLocationCoords = typeof setLocationCoords === 'function' ? setLocationCoords : () => {};
+
+  // Reset location error/success messages when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (typeof setLocationError === 'function') setLocationError('');
+      if (typeof setLocationSuccess === 'function') setLocationSuccess('');
+    }
+  }, [isOpen]);
+
+  // Calculate real distance from LITRA KING shop whenever PIN code or GPS coordinates update
+  useEffect(() => {
+    let isMounted = true;
+
+    async function computeDistance() {
+      const cleanPincode = (formData.pincode || '').toString().trim().replace(/\D/g, '');
+      const hasGps = locationCoords && locationCoords.lat !== undefined && locationCoords.lat !== null && locationCoords.lng !== undefined && locationCoords.lng !== null;
+
+      // Priority Rule C:
+      // 1. Valid GPS coordinates -> GPS distance
+      // 2. GPS unavailable/denied/failed -> Pincode-based distance
+      // 3. Neither GPS nor valid pincode available -> clear distance/charge
+      if (hasGps) {
+        await updateDeliveryFromPincode(cleanPincode);
+      } else if (cleanPincode.length === 6) {
+        await updateDeliveryFromPincode(cleanPincode);
+      } else {
+        if (isMounted) {
+          if (typeof setDeliveryDistance === 'function') setDeliveryDistance(null);
+          if (typeof setDeliveryCharge === 'function') setDeliveryCharge(null);
+        }
+      }
+    }
+
+    computeDistance();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [formData.pincode, locationCoords]);
+
   if (!isOpen) return null;
 
   const checkoutItems = getCheckoutItems();
   const subtotal = getCheckoutSubtotal();
-  const deliveryCharge = subtotal >= 1000 || subtotal === 0 ? 0 : 99;
-  const grandTotal = subtotal + deliveryCharge;
+  const grandTotal = subtotal + (deliveryCharge !== null ? deliveryCharge : 0);
 
   const handleUpdateQuantity = (itemKey, delta) => {
     if (checkoutMode === 'single') {
@@ -89,6 +135,11 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       return false;
     }
 
+    if (deliveryDistance === null || deliveryCharge === null) {
+      setErrorMessage('Please enter a valid 6-digit PIN code or click "Use My Current Location" to calculate delivery distance and charge.');
+      return false;
+    }
+
     if (checkoutItems.length === 0) {
       setErrorMessage('No items selected for checkout.');
       return false;
@@ -99,31 +150,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   // Handle Browser Geolocation API
   const handleGetCurrentLocation = () => {
-    setLocationError('');
-    setLocationSuccess('');
-
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser. Please enter your address manually.');
-      return;
-    }
-
-    setLocationLoading(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setLocationCoords({ lat, lng });
-        setLocationSuccess(`Location detected successfully (${lat}, ${lng})`);
-        setLocationLoading(false);
-      },
-      (err) => {
-        console.warn('Geolocation error:', err.message);
-        setLocationError('Location permission was denied. Please enter your address manually.');
-        setLocationLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+    detectLocation();
   };
 
   // Triggered when customer clicks "I Have Completed Payment" or submits form
@@ -161,12 +188,15 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       email: (formData.email || '').trim(),
       address: finalAddress,
       city: formData.city.trim(),
-      state: formData.state.trim() || 'Rajasthan',
+      state: 'Rajasthan',
       pincode: cleanPincode,
+      latitude: locationCoords?.lat || null,
+      longitude: locationCoords?.lng || null,
     };
 
     const payloadItems = checkoutItems.map((item) => ({
-      productId: item.productId,
+      _id: item._id || item.productId,
+      productId: item.productId || item._id,
       name: item.name,
       price: item.price,
       size: item.size,
@@ -184,9 +214,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
           customer: payloadCustomer,
           items: payloadItems,
           subtotal: subtotal,
+          deliveryDistance: deliveryDistance || 0,
+          deliveryDistanceKm: deliveryDistance || 0,
           deliveryCharge: deliveryCharge,
           totalAmount: grandTotal,
           paymentMethod: paymentMethod === 'UPI' ? 'UPI' : 'COD',
+          latitude: locationCoords?.lat || null,
+          longitude: locationCoords?.lng || null,
         }),
       });
 
@@ -195,9 +229,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       if (res.ok && data && data.success) {
         clearCheckout();
         setFormData(INITIAL_FORM);
-        setLocationCoords(null);
-        setLocationSuccess('');
-        setLocationError('');
+        safeSetLocationCoords(null);
+        if (typeof setLocationSuccess === 'function') {
+          setLocationSuccess('');
+        }
+        if (typeof setLocationError === 'function') {
+          setLocationError('');
+        }
         setShowConfirmationModal(false);
         setHasClickedCompletedPayment(false);
         setUserConfirmedPayment(false);
@@ -307,12 +345,12 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   required
                   value={formData.address}
                   onChange={(e) => handleFormChange('address', e.target.value)}
-                  placeholder="Mention shop number, landmark, area..."
+                  placeholder="Mention house/shop number, street, colony..."
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-amber-400 transition-colors"
                 ></textarea>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-zinc-300 mb-1">City / Town *</label>
                   <input
@@ -321,18 +359,6 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                     value={formData.city}
                     onChange={(e) => handleFormChange('city', e.target.value)}
                     placeholder="Chomu"
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-amber-400 transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-300 mb-1">State *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.state}
-                    onChange={(e) => handleFormChange('state', e.target.value)}
-                    placeholder="Rajasthan"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-amber-400 transition-colors"
                   />
                 </div>
@@ -369,7 +395,7 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   {locationLoading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
-                      <span>Detecting Current Location...</span>
+                      <span>Detecting location...</span>
                     </>
                   ) : (
                     <>
@@ -584,21 +610,51 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                 ))}
               </div>
 
-              {/* Price Breakdown */}
-              <div className="space-y-2 text-xs pt-2 border-t border-zinc-800">
+              {/* Clean Customer Order Summary */}
+              <div className="space-y-2.5 text-xs pt-2 border-t border-zinc-800">
                 <div className="flex justify-between text-zinc-400">
-                  <span>Subtotal</span>
+                  <span>Product Total</span>
                   <span className="font-mono font-bold text-zinc-200">₹{subtotal}</span>
                 </div>
-                <div className="flex justify-between text-zinc-400">
-                  <span>Delivery Charge</span>
-                  <span className="font-mono font-bold text-zinc-200">
-                    {deliveryCharge === 0 ? <span className="text-emerald-400">FREE</span> : `₹${deliveryCharge}`}
+
+                <div className="flex justify-between items-center text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Distance from LITRA KING Store</span>
+                  </span>
+                  <span className="font-mono font-bold text-amber-400">
+                    {locationLoading ? (
+                      <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
+                    ) : deliveryDistance !== null ? (
+                      `${Number(deliveryDistance).toFixed(1)} km`
+                    ) : (
+                      <span className="text-[11px] text-amber-400/90 font-sans font-normal">Pending Location</span>
+                    )}
                   </span>
                 </div>
+
+                <div className="flex justify-between items-center text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Delivery Charge</span>
+                  </span>
+                  <span className="font-mono font-bold text-emerald-400">
+                    {locationLoading ? (
+                      <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
+                    ) : deliveryCharge !== null ? (
+                      `₹${deliveryCharge}`
+                    ) : (
+                      <span className="text-[11px] text-amber-400/90 font-sans font-normal">Pending Location</span>
+                    )}
+                  </span>
+                </div>
+
                 <div className="pt-2 border-t border-zinc-800 flex justify-between text-base font-black text-white">
-                  <span>Grand Total</span>
-                  <span className="font-mono text-amber-400 text-xl">₹{grandTotal}</span>
+                  <span>Final Total</span>
+                  <span className="font-mono text-amber-400 text-xl">
+                    ₹{grandTotal}
+                    {deliveryCharge === null && <span className="text-[10px] text-zinc-500 block font-normal font-sans text-right">+ Delivery Fee</span>}
+                  </span>
                 </div>
               </div>
             </div>

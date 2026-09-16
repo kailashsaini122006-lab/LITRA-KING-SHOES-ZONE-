@@ -2,6 +2,31 @@ const crypto = require('crypto');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { DEFAULT_PRODUCTS } = require('./productController');
+const smsService = require('../utils/smsService');
+
+/**
+ * Generate 6-digit random Delivery OTP, hash it, set 10-min expiry, and send SMS
+ */
+async function generateAndSaveDeliveryOtp(order) {
+  if (!order) return { rawOtp: null, smsResult: null };
+  const rawOtp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpHash = crypto.createHash('sha256').update(rawOtp).digest('hex');
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  order.deliveryOtpHash = otpHash;
+  order.otpExpiresAt = expiresAt;
+  order.otpAttempts = 0;
+  await order.save();
+
+  // Dispatch SMS and await gateway response
+  const smsResult = await smsService.sendDeliveryOtpSms({
+    phone: order.customer?.phone,
+    otp: rawOtp,
+    orderId: order.orderId,
+  });
+
+  return { rawOtp, smsResult };
+}
 
 /**
  * Generate sequential Order ID (e.g. LK1001, LK1002, LK1003)
@@ -20,6 +45,52 @@ async function generateOrderId() {
   }
 
   return candidateId;
+}
+
+/**
+ * Helper: Find product in MongoDB by _id, productId, or fallback name/DEFAULT_PRODUCTS
+ */
+async function findProductByItem(item) {
+  if (!item) return null;
+  let dbProduct;
+
+  // 1. Try by MongoDB _id (if 24-character hex string)
+  const targetId = item._id || item.productId;
+  if (targetId && targetId.toString().match(/^[0-9a-fA-F]{24}$/)) {
+    dbProduct = await Product.findById(targetId);
+  }
+
+  // 2. Try by string productId (e.g. 'LK-NTR-002')
+  if (!dbProduct && item.productId) {
+    dbProduct = await Product.findOne({ productId: item.productId });
+  }
+
+  // 3. Try by item._id string if different from productId
+  if (!dbProduct && item._id) {
+    dbProduct = await Product.findOne({ productId: item._id });
+  }
+
+  // 4. Try by exact product name match (fallback)
+  if (!dbProduct && item.name) {
+    const escapedName = item.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    dbProduct = await Product.findOne({ name: { $regex: `^${escapedName}$`, $options: 'i' } });
+  }
+
+  // 5. Try in DEFAULT_PRODUCTS fallback dataset
+  if (!dbProduct) {
+    const found = Array.isArray(DEFAULT_PRODUCTS) ? DEFAULT_PRODUCTS.find(p =>
+      p.productId === item.productId ||
+      p._id === item.productId ||
+      p.productId === item._id ||
+      p._id === item._id ||
+      (item.name && p.name.toLowerCase() === item.name.toLowerCase())
+    ) : null;
+    if (found) {
+      dbProduct = { ...found, stock: found.stock !== undefined ? found.stock : 25 };
+    }
+  }
+
+  return dbProduct;
 }
 
 /**
@@ -64,18 +135,20 @@ exports.initRazorpayOrder = async (req, res) => {
 
     let calculatedSubtotal = 0;
     for (const item of items) {
-      let dbProduct;
-      if (item.productId.match(/^[0-9a-fA-F]{24}$/)) {
-        dbProduct = await Product.findById(item.productId);
-      }
-      if (!dbProduct) {
-        dbProduct = await Product.findOne({ productId: item.productId });
-      }
+      const dbProduct = await findProductByItem(item);
 
       if (!dbProduct) {
         return res.status(404).json({
           success: false,
           message: `Product "${item.name || item.productId}" not found.`,
+        });
+      }
+
+      // ── Out-of-Stock Backend Validation ────────────────────────────────
+      if (dbProduct.inStock === false) {
+        return res.status(400).json({
+          success: false,
+          message: `"${dbProduct.name}" is currently Out of Stock. Please remove it from your cart and try again.`,
         });
       }
 
@@ -89,7 +162,10 @@ exports.initRazorpayOrder = async (req, res) => {
       calculatedSubtotal += dbProduct.price * item.quantity;
     }
 
-    const deliveryCharge = calculatedSubtotal >= 1000 ? 0 : 99;
+    const reqDeliveryCharge = req.body.deliveryCharge;
+    const deliveryCharge = (reqDeliveryCharge !== undefined && reqDeliveryCharge !== null && !isNaN(Number(reqDeliveryCharge)))
+      ? Number(reqDeliveryCharge)
+      : 0;
     const grandTotal = calculatedSubtotal + deliveryCharge;
     const amountInPaise = grandTotal * 100; // Razorpay expects amount in paise
 
@@ -220,18 +296,20 @@ exports.verifyRazorpayPayment = async (req, res) => {
     const stockUpdates = [];
 
     for (const item of items) {
-      let dbProduct;
-      if (item.productId.match(/^[0-9a-fA-F]{24}$/)) {
-        dbProduct = await Product.findById(item.productId);
-      }
-      if (!dbProduct) {
-        dbProduct = await Product.findOne({ productId: item.productId });
-      }
+      const dbProduct = await findProductByItem(item);
 
       if (!dbProduct) {
         return res.status(404).json({
           success: false,
-          message: `Product "${item.name}" not found.`,
+          message: `Product "${item.name || item.productId}" not found.`,
+        });
+      }
+
+      // ── Out-of-Stock Backend Validation ────────────────────────────────
+      if (dbProduct.inStock === false) {
+        return res.status(400).json({
+          success: false,
+          message: `"${dbProduct.name}" is currently Out of Stock. Please remove it from your cart and try again.`,
         });
       }
 
@@ -239,7 +317,7 @@ exports.verifyRazorpayPayment = async (req, res) => {
       calculatedSubtotal += itemTotal;
 
       validatedItems.push({
-        productId: dbProduct.productId,
+        productId: dbProduct.productId || (dbProduct._id ? dbProduct._id.toString() : ''),
         name: dbProduct.name,
         price: dbProduct.price,
         size: Number(item.size) || 8,
@@ -248,15 +326,31 @@ exports.verifyRazorpayPayment = async (req, res) => {
         image: item.image || (dbProduct.images && dbProduct.images[0]) || '',
       });
 
-      stockUpdates.push({
-        productId: dbProduct._id,
-        newStock: Math.max(0, dbProduct.stock - Number(item.quantity)),
-      });
+      if (dbProduct._id && dbProduct._id.toString().match(/^[0-9a-fA-F]{24}$/)) {
+        stockUpdates.push({
+          productId: dbProduct._id,
+          newStock: Math.max(0, dbProduct.stock - Number(item.quantity)),
+        });
+      }
     }
 
-    const deliveryCharge = calculatedSubtotal >= 1000 ? 0 : 99;
+    const reqDeliveryCharge = req.body.deliveryCharge;
+    const deliveryCharge = (reqDeliveryCharge !== undefined && reqDeliveryCharge !== null && !isNaN(Number(reqDeliveryCharge)))
+      ? Number(reqDeliveryCharge)
+      : 0;
+    const rawDist = req.body.deliveryDistanceKm !== undefined && req.body.deliveryDistanceKm !== null ? req.body.deliveryDistanceKm : req.body.deliveryDistance;
+    const deliveryDistance = (rawDist !== undefined && rawDist !== null && !isNaN(Number(rawDist)))
+      ? Number(rawDist)
+      : 0;
     const grandTotal = calculatedSubtotal + deliveryCharge;
     const orderId = await generateOrderId();
+
+    const latVal = (customer.latitude !== undefined && customer.latitude !== null && !isNaN(Number(customer.latitude)))
+      ? Number(customer.latitude)
+      : ((req.body.latitude !== undefined && req.body.latitude !== null && !isNaN(Number(req.body.latitude))) ? Number(req.body.latitude) : null);
+    const lngVal = (customer.longitude !== undefined && customer.longitude !== null && !isNaN(Number(customer.longitude)))
+      ? Number(customer.longitude)
+      : ((req.body.longitude !== undefined && req.body.longitude !== null && !isNaN(Number(req.body.longitude))) ? Number(req.body.longitude) : null);
 
     // Create Order with 'Online Payment' & 'Paid' Status in MongoDB
     const newOrder = await Order.create({
@@ -266,10 +360,16 @@ exports.verifyRazorpayPayment = async (req, res) => {
         phone: cleanPhone,
         email: (customer.email || '').trim().toLowerCase(),
         address: customer.address.trim(),
+        area: (customer.area || '').trim(),
+        landmark: (customer.landmark || '').trim(),
         city: customer.city.trim(),
         state: (customer.state || 'Rajasthan').trim(),
         pincode: cleanPincode,
+        latitude: latVal,
+        longitude: lngVal,
       },
+      latitude: latVal,
+      longitude: lngVal,
       items: validatedItems,
       subtotal: calculatedSubtotal,
       deliveryCharge,
@@ -311,7 +411,7 @@ exports.verifyRazorpayPayment = async (req, res) => {
  */
 exports.createOrder = async (req, res) => {
   try {
-    const { customer, items, paymentMethod, deliveryCharge: reqDeliveryCharge } = req.body;
+    const { customer, items, paymentMethod, deliveryCharge: reqDeliveryCharge, deliveryDistance: reqDeliveryDistance, deliveryDistanceKm: reqDeliveryDistanceKm } = req.body;
 
     if (!customer || !customer.name || !customer.phone || !customer.address || !customer.city || !customer.pincode) {
       return res.status(400).json({
@@ -348,32 +448,27 @@ exports.createOrder = async (req, res) => {
     const stockUpdates = [];
 
     for (const item of items) {
-      if (!item.productId || !item.quantity || item.quantity < 1) {
+      if ((!item.productId && !item._id && !item.name) || !item.quantity || item.quantity < 1) {
         return res.status(400).json({
           success: false,
           message: 'Invalid product item in shopping cart.',
         });
       }
 
-      let dbProduct;
-      if (item.productId.match(/^[0-9a-fA-F]{24}$/)) {
-        dbProduct = await Product.findById(item.productId);
-      }
-      if (!dbProduct) {
-        dbProduct = await Product.findOne({ productId: item.productId });
-      }
-
-      if (!dbProduct && item.productId) {
-        const found = Array.isArray(DEFAULT_PRODUCTS) ? DEFAULT_PRODUCTS.find(p => p.productId === item.productId || p._id === item.productId) : null;
-        if (found) {
-          dbProduct = { ...found, stock: found.stock || 20 };
-        }
-      }
+      const dbProduct = await findProductByItem(item);
 
       if (!dbProduct) {
         return res.status(404).json({
           success: false,
           message: `Product "${item.name || item.productId}" not found.`,
+        });
+      }
+
+      // ── Out-of-Stock Backend Validation ────────────────────────────────
+      if (dbProduct.inStock === false) {
+        return res.status(400).json({
+          success: false,
+          message: `"${dbProduct.name}" is currently Out of Stock. Please remove it from your cart and try again.`,
         });
       }
 
@@ -388,7 +483,7 @@ exports.createOrder = async (req, res) => {
       calculatedSubtotal += itemTotal;
 
       validatedItems.push({
-        productId: dbProduct.productId,
+        productId: dbProduct.productId || (dbProduct._id ? dbProduct._id.toString() : ''),
         name: dbProduct.name,
         price: dbProduct.price,
         size: Number(item.size) || 8,
@@ -397,17 +492,30 @@ exports.createOrder = async (req, res) => {
         image: item.image || (dbProduct.images && dbProduct.images[0]) || '',
       });
 
-      stockUpdates.push({
-        productId: dbProduct._id,
-        newStock: Math.max(0, dbProduct.stock - Number(item.quantity)),
-      });
+      if (dbProduct._id && dbProduct._id.toString().match(/^[0-9a-fA-F]{24}$/)) {
+        stockUpdates.push({
+          productId: dbProduct._id,
+          newStock: Math.max(0, dbProduct.stock - Number(item.quantity)),
+        });
+      }
     }
 
     const deliveryCharge = (reqDeliveryCharge !== undefined && reqDeliveryCharge !== null && !isNaN(Number(reqDeliveryCharge)))
       ? Number(reqDeliveryCharge)
-      : (calculatedSubtotal >= 1000 ? 0 : 99);
+      : 0;
+    const rawDist = reqDeliveryDistanceKm !== undefined && reqDeliveryDistanceKm !== null ? reqDeliveryDistanceKm : reqDeliveryDistance;
+    const deliveryDistance = (rawDist !== undefined && rawDist !== null && !isNaN(Number(rawDist)))
+      ? Number(rawDist)
+      : 0;
     const grandTotal = calculatedSubtotal + deliveryCharge;
     const orderId = await generateOrderId();
+
+    const latVal = (customer.latitude !== undefined && customer.latitude !== null && !isNaN(Number(customer.latitude)))
+      ? Number(customer.latitude)
+      : ((req.body.latitude !== undefined && req.body.latitude !== null && !isNaN(Number(req.body.latitude))) ? Number(req.body.latitude) : null);
+    const lngVal = (customer.longitude !== undefined && customer.longitude !== null && !isNaN(Number(customer.longitude)))
+      ? Number(customer.longitude)
+      : ((req.body.longitude !== undefined && req.body.longitude !== null && !isNaN(Number(req.body.longitude))) ? Number(req.body.longitude) : null);
 
     const newOrder = await Order.create({
       orderId,
@@ -416,12 +524,20 @@ exports.createOrder = async (req, res) => {
         phone: cleanPhone,
         email: (customer.email || '').trim().toLowerCase(),
         address: customer.address.trim(),
+        area: (customer.area || '').trim(),
+        landmark: (customer.landmark || '').trim(),
         city: customer.city.trim(),
         state: (customer.state || 'Rajasthan').trim(),
         pincode: cleanPincode,
+        latitude: latVal,
+        longitude: lngVal,
       },
+      latitude: latVal,
+      longitude: lngVal,
       items: validatedItems,
       subtotal: calculatedSubtotal,
+      deliveryDistance,
+      deliveryDistanceKm: deliveryDistance,
       deliveryCharge,
       totalAmount: grandTotal,
       paymentMethod: paymentMethod === 'UPI' ? 'UPI' : (paymentMethod === 'Razorpay' || paymentMethod === 'Online Payment' ? 'Online Payment' : 'COD'),
@@ -455,24 +571,86 @@ exports.createOrder = async (req, res) => {
 };
 
 /**
+ * GET /api/orders/search?email=customer@gmail.com
+ * Admin Protected: Search customer orders by Gmail/email (case-insensitive across all historical orders)
+ */
+exports.searchOrdersByEmail = async (req, res) => {
+  try {
+    const emailParam = req.query.email || req.query.search || '';
+    if (!emailParam || !emailParam.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address to search.',
+      });
+    }
+
+    const cleanEmail = emailParam.trim();
+    const escapedEmail = cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Case-insensitive email query across all historical orders & legacy/nested fields
+    const filter = {
+      $or: [
+        { 'customer.email': { $regex: escapedEmail, $options: 'i' } },
+        { email: { $regex: escapedEmail, $options: 'i' } },
+        { customerEmail: { $regex: escapedEmail, $options: 'i' } },
+      ],
+    };
+
+    const orders = await Order.find(filter).sort({ createdAt: -1 });
+    const totalAmountSpent = orders.reduce((sum, o) => sum + (Number(o.totalAmount || o.subtotal) || 0), 0);
+
+    return res.json({
+      success: true,
+      customerEmail: cleanEmail,
+      count: orders.length,
+      totalOrders: orders.length,
+      totalAmountSpent,
+      orders,
+    });
+  } catch (err) {
+    console.error('Error searching orders by email:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to search orders by email: ' + err.message,
+    });
+  }
+};
+
+/**
  * GET /api/orders
- * Admin Protected: Fetch all orders
+ * Admin Protected: Fetch all orders (with status, search, and email filters)
  */
 exports.getOrders = async (req, res) => {
   try {
-    const { status, search } = req.query;
+    const { status, search, email } = req.query;
     const filter = {};
 
-    if (status && status !== 'All') {
-      filter.orderStatus = status;
-    }
+    const rawEmail = (email || '').trim();
+    const rawSearch = (search || '').trim();
 
-    if (search) {
+    if (rawEmail || (rawSearch && rawSearch.includes('@'))) {
+      const queryEmail = rawEmail || rawSearch;
+      const escapedEmail = queryEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
-        { orderId: { $regex: search, $options: 'i' } },
-        { 'customer.name': { $regex: search, $options: 'i' } },
-        { 'customer.phone': { $regex: search, $options: 'i' } },
+        { 'customer.email': { $regex: escapedEmail, $options: 'i' } },
+        { email: { $regex: escapedEmail, $options: 'i' } },
+        { customerEmail: { $regex: escapedEmail, $options: 'i' } },
       ];
+    } else {
+      if (status && status !== 'All') {
+        filter.orderStatus = status;
+      }
+
+      if (rawSearch) {
+        const escapedSearch = rawSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        filter.$or = [
+          { orderId: { $regex: escapedSearch, $options: 'i' } },
+          { 'customer.name': { $regex: escapedSearch, $options: 'i' } },
+          { 'customer.phone': { $regex: escapedSearch, $options: 'i' } },
+          { 'customer.email': { $regex: escapedSearch, $options: 'i' } },
+          { email: { $regex: escapedSearch, $options: 'i' } },
+        ];
+      }
     }
 
     const orders = await Order.find(filter).sort({ createdAt: -1 });
@@ -540,9 +718,9 @@ exports.getOrderById = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { orderStatus, paymentStatus } = req.body;
+    const { orderStatus, paymentStatus, estimatedDeliveryTime, expectedDeliveryDate } = req.body;
 
-    const validStatuses = ['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'];
+    const validStatuses = ['Pending', 'Confirmed', 'Packed', 'Out for Delivery', 'Customer Reached', 'Shipped', 'Delivered', 'Cancelled'];
     const validPaymentStatuses = ['Pending', 'Pending Verification', 'Paid', 'Failed', 'Payment Failed', 'Payment Processing'];
 
     if (orderStatus && !validStatuses.includes(orderStatus)) {
@@ -593,16 +771,34 @@ exports.updateOrderStatus = async (req, res) => {
       console.log(`📦 [Stock Re-reduced] Stock deducted for un-cancelled Order #${order.orderId}`);
     }
 
-    if (orderStatus) order.orderStatus = orderStatus;
-    if (paymentStatus) order.paymentStatus = paymentStatus;
-
-    if (order.orderStatus === 'Delivered' && order.paymentMethod === 'COD') {
-      order.paymentStatus = 'Paid';
+    // Prevent manual Delivered status without OTP verification unless force is specified
+    if (orderStatus === 'Delivered' && !order.otpVerified && !req.body.force) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot mark order as Delivered without Delivery OTP verification. Delivery executive must verify Delivery OTP.',
+      });
     }
 
-    await order.save();
+    if (orderStatus) order.orderStatus = orderStatus;
+    if (paymentStatus) order.paymentStatus = paymentStatus;
+    if (estimatedDeliveryTime !== undefined) order.estimatedDeliveryTime = estimatedDeliveryTime;
+    if (expectedDeliveryDate !== undefined) order.expectedDeliveryDate = expectedDeliveryDate;
 
-    console.log(`🚚 [Admin Update] Order #${order.orderId} updated: Status = ${order.orderStatus}, Payment = ${order.paymentStatus}`);
+    if (order.orderStatus === 'Delivered') {
+      if (order.paymentMethod === 'COD') {
+        order.paymentStatus = 'Paid';
+      }
+      order.deliveryCompletedAt = new Date();
+    }
+
+    // If order status is set to Customer Reached, automatically generate and send OTP via SMS!
+    if (orderStatus === 'Customer Reached' && !order.otpVerified) {
+      await generateAndSaveDeliveryOtp(order);
+    } else {
+      await order.save();
+    }
+
+    console.log(`🚚 [Admin Update] Order #${order.orderId} updated: Status = ${order.orderStatus}, Payment = ${order.paymentStatus}, DeliveryTime = ${order.estimatedDeliveryTime}`);
 
     return res.json({
       success: true,
@@ -681,27 +877,59 @@ exports.getOrderMetrics = async (req, res) => {
   try {
     const allOrders = await Order.find({});
 
+    const getOrderAmount = (o) => {
+      if (o.totalAmount !== undefined && o.totalAmount !== null && !isNaN(Number(o.totalAmount))) {
+        return Number(o.totalAmount);
+      }
+      const sub = o.subtotal !== undefined && o.subtotal !== null && !isNaN(Number(o.subtotal))
+        ? Number(o.subtotal)
+        : (Array.isArray(o.items) ? o.items.reduce((s, i) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0) : 0);
+      const del = o.deliveryCharge !== undefined && o.deliveryCharge !== null && !isNaN(Number(o.deliveryCharge))
+        ? Number(o.deliveryCharge)
+        : (sub >= 1000 || sub === 0 ? 0 : 99);
+      return sub + del;
+    };
+
+    const getOrderDate = (o) => {
+      if (o.createdAt) return new Date(o.createdAt);
+      if (o._id && o._id.getTimestamp) return o._id.getTimestamp();
+      return new Date();
+    };
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    let todaySales = 0;
+    let monthSales = 0;
+
+    allOrders.forEach((o) => {
+      const isCancelled = o.orderStatus === 'Cancelled';
+      const orderAmount = getOrderAmount(o);
+      const orderTime = getOrderDate(o).getTime();
+
+      if (!isCancelled) {
+        if (orderTime >= startOfToday) {
+          todaySales += orderAmount;
+        }
+        if (orderTime >= startOfMonth) {
+          monthSales += orderAmount;
+        }
+      }
+    });
+
     const metrics = {
+      todaySales,
+      monthSales,
       totalOrders: allOrders.length,
+      deliveredOrders: allOrders.filter((o) => o.orderStatus === 'Delivered').length,
       pendingOrders: allOrders.filter((o) => o.orderStatus === 'Pending').length,
       confirmedOrders: allOrders.filter((o) => o.orderStatus === 'Confirmed').length,
       shippedOrders: allOrders.filter((o) => o.orderStatus === 'Shipped').length,
-      deliveredOrders: allOrders.filter((o) => o.orderStatus === 'Delivered').length,
       cancelledOrders: allOrders.filter((o) => o.orderStatus === 'Cancelled').length,
       totalSales: allOrders
         .filter((o) => o.orderStatus !== 'Cancelled')
-        .reduce((sum, o) => {
-          if (o.totalAmount !== undefined && o.totalAmount !== null) {
-            return sum + Number(o.totalAmount);
-          }
-          const sub = o.subtotal !== undefined && o.subtotal !== null
-            ? Number(o.subtotal)
-            : (Array.isArray(o.items) ? o.items.reduce((s, i) => s + (Number(i.price) * Number(i.quantity)), 0) : 0);
-          const del = o.deliveryCharge !== undefined && o.deliveryCharge !== null
-            ? Number(o.deliveryCharge)
-            : (sub >= 1000 || sub === 0 ? 0 : 99);
-          return sum + (sub + del);
-        }, 0),
+        .reduce((sum, o) => sum + getOrderAmount(o), 0),
     };
 
     return res.json({
@@ -716,3 +944,522 @@ exports.getOrderMetrics = async (req, res) => {
     });
   }
 };
+
+/**
+ * POST /api/orders/:id/verify-otp
+ * Verify Customer Delivery OTP and mark order as Delivered
+ */
+exports.verifyDeliveryOtp = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { otp } = req.body;
+
+    if (!otp || !otp.toString().trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter the 6-digit Delivery OTP.',
+      });
+    }
+
+    const cleanOtp = otp.toString().trim();
+    if (cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid OTP format. OTP must be a 6-digit number.',
+      });
+    }
+
+    let order = await Order.findOne({ orderId: id.toUpperCase() });
+    if (!order && id.match(/^[0-9a-fA-F]{24}$/)) {
+      order = await Order.findById(id);
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: `Order #${id} not found.`,
+      });
+    }
+
+    if (order.otpVerified || order.orderStatus === 'Delivered') {
+      return res.json({
+        success: true,
+        message: 'Order is already delivered and verified.',
+        order,
+      });
+    }
+
+    // Max 5 attempts
+    if (order.otpAttempts >= 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum OTP verification attempts reached (5/5). Click "Resend OTP" to send a new OTP.',
+      });
+    }
+
+    // Expiry check
+    if (order.otpExpiresAt && new Date() > new Date(order.otpExpiresAt)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Delivery OTP has expired. Click "Resend OTP" to generate a new OTP for the customer.',
+      });
+    }
+
+    if (!order.deliveryOtpHash) {
+      await generateAndSaveDeliveryOtp(order);
+      return res.status(400).json({
+        success: false,
+        message: 'A new Delivery OTP has been generated and sent to the customer via SMS.',
+      });
+    }
+
+    // Hash submitted OTP and compare with stored hash
+    const submittedHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
+
+    if (submittedHash !== order.deliveryOtpHash) {
+      order.otpAttempts = (order.otpAttempts || 0) + 1;
+      await order.save();
+      const attemptsLeft = Math.max(0, 5 - order.otpAttempts);
+      return res.status(400).json({
+        success: false,
+        message: `Incorrect Delivery OTP. Remaining attempts: ${attemptsLeft}`,
+      });
+    }
+
+    // OTP Verified Successfully!
+    order.orderStatus = 'Delivered';
+    if (order.paymentMethod === 'COD') {
+      order.paymentStatus = 'Paid';
+    }
+    order.otpVerified = true;
+    order.otpVerifiedAt = new Date();
+    order.deliveryCompletedAt = new Date();
+    order.deliveryOtpHash = null; // Clear hash after verification
+    await order.save();
+
+    console.log(`✅ [Delivery OTP Verified] Order #${order.orderId} successfully marked as DELIVERED.`);
+
+    return res.json({
+      success: true,
+      message: 'Delivery successfully verified.',
+      order,
+    });
+  } catch (err) {
+    console.error('Error verifying delivery OTP:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to verify Delivery OTP: ' + err.message,
+    });
+  }
+};
+
+/**
+ * POST /api/orders/:id/resend-otp
+ * Generate & Resend new Delivery OTP via SMS
+ */
+exports.resendDeliveryOtp = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let order = await Order.findOne({ orderId: id.toUpperCase() });
+    if (!order && id.match(/^[0-9a-fA-F]{24}$/)) {
+      order = await Order.findById(id);
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: `Order #${id} not found.`,
+      });
+    }
+
+    if (order.otpVerified || order.orderStatus === 'Delivered') {
+      return res.status(400).json({
+        success: false,
+        message: 'Order is already delivered and verified.',
+      });
+    }
+
+    const { rawOtp, smsResult } = await generateAndSaveDeliveryOtp(order);
+
+    if (smsResult && !smsResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: `SMS Gateway Error: ${smsResult.error}`,
+        smsResult,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `New Delivery OTP sent successfully via SMS to +91 ${order.customer?.phone}!`,
+      order,
+      smsResult,
+      liveSmsSent: true,
+    });
+  } catch (err) {
+    console.error('Error resending delivery OTP:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to resend Delivery OTP: ' + err.message,
+    });
+  }
+};
+
+/**
+ * POST /api/orders/:id/customer-reached
+ * Delivery Boy action: Mark order status as Customer Reached and auto-generate OTP & send SMS
+ */
+exports.markCustomerReached = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let order = await Order.findOne({ orderId: id.toUpperCase() });
+    if (!order && id.match(/^[0-9a-fA-F]{24}$/)) {
+      order = await Order.findById(id);
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: `Order #${id} not found.`,
+      });
+    }
+
+    if (order.otpVerified || order.orderStatus === 'Delivered') {
+      return res.status(400).json({
+        success: false,
+        message: 'Order is already delivered.',
+      });
+    }
+
+    // Update status to Customer Reached
+    order.orderStatus = 'Customer Reached';
+
+    const { rawOtp, smsResult } = await generateAndSaveDeliveryOtp(order);
+
+    if (smsResult && !smsResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: `Status updated to Customer Reached, BUT SMS dispatch failed: ${smsResult.error}`,
+        order,
+        smsResult,
+      });
+    }
+
+    console.log(`📍 [Customer Reached] Order #${order.orderId} updated to Customer Reached. Delivery OTP sent via SMS to +91 ${order.customer?.phone}.`);
+
+    return res.json({
+      success: true,
+      message: `Status updated to Customer Reached. Delivery OTP sent via SMS to +91 ${order.customer?.phone}!`,
+      order,
+      smsResult,
+      liveSmsSent: true,
+    });
+  } catch (err) {
+    console.error('Error marking Customer Reached:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update status to Customer Reached: ' + err.message,
+    });
+  }
+};
+
+/**
+ * GET /api/orders/reports/daily?date=YYYY-MM-DD
+ * Admin Protected: Daily Sales Report
+ */
+exports.getDailySalesReport = async (req, res) => {
+  try {
+    const today = new Date();
+    const defaultDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const dateStr = (req.query.date || defaultDateStr).trim();
+
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format. Expected YYYY-MM-DD.',
+      });
+    }
+
+    const [year, month, day] = parts;
+
+    // 1. Server local time range
+    const startLocal = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const endLocal = new Date(year, month - 1, day, 23, 59, 59, 999);
+
+    // 2. Strict UTC date range
+    const startUTC = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    const endUTC = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+
+    // 3. Indian Standard Time (IST UTC+5:30) range
+    const startIST = new Date(Date.UTC(year, month - 1, day - 1, 18, 30, 0, 0));
+    const endIST = new Date(Date.UTC(year, month - 1, day, 18, 29, 59, 999));
+
+    const orders = await Order.find({
+      $or: [
+        { createdAt: { $gte: startLocal, $lte: endLocal } },
+        { createdAt: { $gte: startUTC, $lte: endUTC } },
+        { createdAt: { $gte: startIST, $lte: endIST } },
+      ],
+    }).sort({ createdAt: -1 });
+
+    const getOrderAmount = (o) => {
+      if (o.totalAmount !== undefined && o.totalAmount !== null && !isNaN(Number(o.totalAmount))) {
+        return Number(o.totalAmount);
+      }
+      const sub = o.subtotal !== undefined && o.subtotal !== null && !isNaN(Number(o.subtotal))
+        ? Number(o.subtotal)
+        : (Array.isArray(o.items) ? o.items.reduce((s, i) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0) : 0);
+      const del = o.deliveryCharge !== undefined && o.deliveryCharge !== null && !isNaN(Number(o.deliveryCharge))
+        ? Number(o.deliveryCharge)
+        : (sub >= 1000 || sub === 0 ? 0 : 99);
+      return sub + del;
+    };
+
+    let totalSales = 0;
+    let onlineSales = 0;
+    let onlineOrdersCount = 0;
+    let codSales = 0;
+    let codOrdersCount = 0;
+    let otherSales = 0;
+    let otherOrdersCount = 0;
+    let cancelledCount = 0;
+
+    orders.forEach((o) => {
+      const isCancelled = o.orderStatus === 'Cancelled';
+      const amt = getOrderAmount(o);
+      const method = (o.paymentMethod || 'COD').toUpperCase();
+
+      if (isCancelled) {
+        cancelledCount++;
+        return;
+      }
+
+      totalSales += amt;
+
+      if (method.includes('ONLINE') || method.includes('RAZORPAY') || method.includes('UPI')) {
+        onlineSales += amt;
+        onlineOrdersCount++;
+      } else if (method === 'COD') {
+        codSales += amt;
+        codOrdersCount++;
+      } else {
+        otherSales += amt;
+        otherOrdersCount++;
+      }
+    });
+
+    return res.json({
+      success: true,
+      selectedDate: dateStr,
+      summary: {
+        totalSales,
+        totalOrders: orders.length,
+        validOrdersCount: orders.length - cancelledCount,
+        cancelledOrdersCount: cancelledCount,
+        onlineSales,
+        onlineOrdersCount,
+        codSales,
+        codOrdersCount,
+        otherSales,
+        otherOrdersCount,
+      },
+      orders,
+    });
+  } catch (err) {
+    console.error('Error generating daily sales report:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate daily sales report: ' + err.message,
+    });
+  }
+};
+
+/**
+ * GET /api/orders/reports/monthly?year=YYYY&month=MM or ?monthStr=YYYY-MM
+ * Admin Protected: Monthly Sales Report
+ */
+exports.getMonthlySalesReport = async (req, res) => {
+  try {
+    const now = new Date();
+    let year = Number(req.query.year) || now.getFullYear();
+    let month = Number(req.query.month) || (now.getMonth() + 1);
+
+    if (req.query.monthStr && req.query.monthStr.includes('-')) {
+      const parts = req.query.monthStr.split('-').map(Number);
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        year = parts[0];
+        month = parts[1];
+      }
+    }
+
+    const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const orders = await Order.find({
+      createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+    }).sort({ createdAt: -1 });
+
+    const getOrderAmount = (o) => {
+      if (o.totalAmount !== undefined && o.totalAmount !== null && !isNaN(Number(o.totalAmount))) {
+        return Number(o.totalAmount);
+      }
+      const sub = o.subtotal !== undefined && o.subtotal !== null && !isNaN(Number(o.subtotal))
+        ? Number(o.subtotal)
+        : (Array.isArray(o.items) ? o.items.reduce((s, i) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0) : 0);
+      const del = o.deliveryCharge !== undefined && o.deliveryCharge !== null && !isNaN(Number(o.deliveryCharge))
+        ? Number(o.deliveryCharge)
+        : (sub >= 1000 || sub === 0 ? 0 : 99);
+      return sub + del;
+    };
+
+    let totalSales = 0;
+    let onlineSales = 0;
+    let onlineOrdersCount = 0;
+    let codSales = 0;
+    let codOrdersCount = 0;
+    let otherSales = 0;
+    let otherOrdersCount = 0;
+    let cancelledCount = 0;
+
+    orders.forEach((o) => {
+      const isCancelled = o.orderStatus === 'Cancelled';
+      const amt = getOrderAmount(o);
+      const method = (o.paymentMethod || 'COD').toUpperCase();
+
+      if (isCancelled) {
+        cancelledCount++;
+        return;
+      }
+
+      totalSales += amt;
+
+      if (method.includes('ONLINE') || method.includes('RAZORPAY') || method.includes('UPI')) {
+        onlineSales += amt;
+        onlineOrdersCount++;
+      } else if (method === 'COD') {
+        codSales += amt;
+        codOrdersCount++;
+      } else {
+        otherSales += amt;
+        otherOrdersCount++;
+      }
+    });
+
+    const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+
+    return res.json({
+      success: true,
+      selectedMonth: monthStr,
+      year,
+      month,
+      summary: {
+        totalSales,
+        totalOrders: orders.length,
+        validOrdersCount: orders.length - cancelledCount,
+        cancelledOrdersCount: cancelledCount,
+        onlineSales,
+        onlineOrdersCount,
+        codSales,
+        codOrdersCount,
+        otherSales,
+        otherOrdersCount,
+      },
+      orders,
+    });
+  } catch (err) {
+    console.error('Error generating monthly sales report:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate monthly sales report: ' + err.message,
+    });
+  }
+};
+
+/**
+ * GET /api/orders/reports/orders?date=YYYY-MM-DD OR ?month=YYYY-MM
+ * Admin Protected: Detailed Orders Report
+ */
+exports.getOrdersReport = async (req, res) => {
+  try {
+    const { date, month } = req.query;
+    let filter = {};
+    let filterType = 'all';
+    let filterValue = 'All Orders';
+
+    if (date && date.trim()) {
+      const parts = date.trim().split('-').map(Number);
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        const [y, m, d] = parts;
+        const startOfDay = new Date(y, m - 1, d, 0, 0, 0, 0);
+        const endOfDay = new Date(y, m - 1, d, 23, 59, 59, 999);
+        filter.createdAt = { $gte: startOfDay, $lte: endOfDay };
+        filterType = 'date';
+        filterValue = date.trim();
+      }
+    } else if (month && month.trim()) {
+      const parts = month.trim().split('-').map(Number);
+      if (parts.length === 2 && !parts.some(isNaN)) {
+        const [y, m] = parts;
+        const startOfMonth = new Date(y, m - 1, 1, 0, 0, 0, 0);
+        const endOfMonth = new Date(y, m, 0, 23, 59, 59, 999);
+        filter.createdAt = { $gte: startOfMonth, $lte: endOfMonth };
+        filterType = 'month';
+        filterValue = month.trim();
+      }
+    }
+
+    const orders = await Order.find(filter).sort({ createdAt: -1 });
+
+    const getOrderAmount = (o) => {
+      if (o.totalAmount !== undefined && o.totalAmount !== null && !isNaN(Number(o.totalAmount))) {
+        return Number(o.totalAmount);
+      }
+      const sub = o.subtotal !== undefined && o.subtotal !== null && !isNaN(Number(o.subtotal))
+        ? Number(o.subtotal)
+        : (Array.isArray(o.items) ? o.items.reduce((s, i) => s + (Number(i.price || 0) * Number(i.quantity || 1)), 0) : 0);
+      const del = o.deliveryCharge !== undefined && o.deliveryCharge !== null && !isNaN(Number(o.deliveryCharge))
+        ? Number(o.deliveryCharge)
+        : (sub >= 1000 || sub === 0 ? 0 : 99);
+      return sub + del;
+    };
+
+    let totalAmount = 0;
+    let deliveredCount = 0;
+    let pendingCount = 0;
+    let cancelledCount = 0;
+
+    orders.forEach((o) => {
+      if (o.orderStatus === 'Cancelled') {
+        cancelledCount++;
+      } else {
+        totalAmount += getOrderAmount(o);
+      }
+      if (o.orderStatus === 'Delivered') deliveredCount++;
+      if (o.orderStatus === 'Pending') pendingCount++;
+    });
+
+    return res.json({
+      success: true,
+      filterType,
+      filterValue,
+      summary: {
+        totalOrders: orders.length,
+        totalAmount,
+        deliveredCount,
+        pendingCount,
+        cancelledCount,
+      },
+      orders,
+    });
+  } catch (err) {
+    console.error('Error generating orders report:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate orders report: ' + err.message,
+    });
+  }
+};
+

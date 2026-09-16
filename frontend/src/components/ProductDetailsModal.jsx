@@ -7,18 +7,38 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
 
   const [selectedImage, setSelectedImage] = useState('');
   const [selectedSize, setSelectedSize] = useState(8);
+  const [selectedColor, setSelectedColor] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [addedMessage, setAddedMessage] = useState(false);
+  const [unavailableAlert, setUnavailableAlert] = useState(false);
 
   useEffect(() => {
     if (product) {
       const defaultImg = Array.isArray(product.images) && product.images.length ? product.images[0] : (product.img || '');
       setSelectedImage(defaultImg);
       setSelectedSize(Array.isArray(product.sizes) && product.sizes.length ? product.sizes[0] : 8);
+      const colorVal = product.color || (Array.isArray(product.colors) && product.colors.length ? product.colors[0] : 'Default');
+      setSelectedColor(colorVal);
       setQuantity(1);
       setAddedMessage(false);
     }
   }, [product]);
+
+  useEffect(() => {
+    if (isOpen && product) {
+      document.body.style.overflow = 'hidden';
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') onClose();
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = 'unset';
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+  }, [isOpen, product, onClose]);
 
   if (!isOpen || !product) return null;
 
@@ -35,15 +55,17 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
     ? Math.round(((origPrice - sellPrice) / origPrice) * 100)
     : 57;
 
-  const [unavailableAlert, setUnavailableAlert] = useState(false);
-
-  const handleAddToCart = () => {
+  const handleAddToCart = (e) => {
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+    }
     if (isOutOfStock) {
       setUnavailableAlert(true);
       setTimeout(() => setUnavailableAlert(false), 3000);
       return;
     }
-    addToCart(product, selectedSize, '', quantity);
+    const colorToUse = selectedColor || product.color || 'Standard';
+    addToCart(product, selectedSize, colorToUse, quantity);
     setAddedMessage(true);
     setTimeout(() => setAddedMessage(false), 2000);
   };
@@ -54,14 +76,21 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
       setTimeout(() => setUnavailableAlert(false), 3000);
       return;
     }
-    startBuyNow(product, selectedSize, '', quantity, selectedImage);
+    const colorToUse = selectedColor || product.color || 'Standard';
+    startBuyNow(product, selectedSize, colorToUse, quantity, selectedImage);
     onClose();
     if (onBuyNow) onBuyNow();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
-      <div className="relative w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 flex flex-col max-h-[90vh]">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn overflow-y-auto cursor-pointer"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 flex flex-col max-h-[90vh] cursor-default my-auto"
+      >
         
         {/* Header Bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/70">
@@ -225,7 +254,7 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
             <div className="space-y-3 pt-4 border-t border-zinc-800">
               {unavailableAlert && (
                 <div className="p-3 bg-red-950/90 border border-red-500/80 rounded-xl text-red-300 text-xs sm:text-sm text-center font-extrabold animate-bounce flex items-center justify-center gap-2 shadow-xl">
-                  <AlertCircle className="w-4.5 h-4.5 text-red-400" /> <span>Product Available Nahi Hai! (Out of Stock)</span>
+                  <AlertCircle className="w-4.5 h-4.5 text-red-400" /> <span>Out of Stock — This product is currently unavailable.</span>
                 </div>
               )}
 

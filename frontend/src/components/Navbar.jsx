@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Menu, X, Lock, ShoppingBag, PackageCheck } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Menu, X, ShoppingBag, PackageCheck } from 'lucide-react';
 import lkLogo from '../assets/lk_logo.jpg';
 import { useCart } from '../context/CartContext';
 
@@ -7,6 +8,7 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
   const { getCartCount } = useCart();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -17,12 +19,9 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
   }, []);
 
   const navLinks = [
-    { name: 'Home', href: '#home' },
-    { name: 'About', href: '#about' },
-    { name: 'Collection', href: '#collection' },
-    { name: 'Wholesale', href: '#wholesale' },
-    { name: 'Gallery', href: '#gallery' },
-    { name: 'Contact', href: '#contact' },
+    { name: 'Home', path: '/' },
+    { name: 'About', path: '/about' },
+    { name: 'Collection', path: '/collection' },
   ];
 
   const cartCount = getCartCount();
@@ -37,7 +36,7 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         {/* Brand Logo */}
-        <a href="#home" className="flex items-center gap-3 group">
+        <Link to="/" className="flex items-center gap-3 group">
           <img
             src={lkLogo}
             alt="Litra King Logo"
@@ -47,23 +46,27 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
             <span className="text-lg sm:text-2xl font-extrabold tracking-wider text-white flex items-center gap-1.5">
               LITRA KING
             </span>
-            <span className="text-[10px] sm:text-xs font-semibold tracking-widest text-amber-400 uppercase">
-              ONLINE FOOTWEAR STORE
-            </span>
           </div>
-        </a>
+        </Link>
 
         {/* Desktop Navigation Links */}
         <nav className="hidden lg:flex items-center space-x-1">
-          {navLinks.map((link) => (
-            <a
-              key={link.name}
-              href={link.href}
-              className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-zinc-300 hover:text-amber-400 hover:bg-zinc-900/60 rounded-lg transition-all"
-            >
-              {link.name}
-            </a>
-          ))}
+          {navLinks.map((link) => {
+            const isActive = location.pathname === link.path;
+            return (
+              <Link
+                key={link.name}
+                to={link.path}
+                className={`px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                  isActive
+                    ? 'text-amber-400 bg-zinc-900/90 border border-amber-500/30'
+                    : 'text-zinc-300 hover:text-amber-400 hover:bg-zinc-900/60'
+                }`}
+              >
+                {link.name}
+              </Link>
+            );
+          })}
           <button
             onClick={onOpenTracking}
             className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all flex items-center gap-1.5"
@@ -91,15 +94,6 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
             )}
           </button>
 
-          {/* Call Hotline Button */}
-          <a
-            href="tel:9257575393"
-            className="hidden sm:flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 text-zinc-200 hover:text-amber-400 px-3.5 py-2 rounded-full font-bold text-xs shadow-md transition-all"
-          >
-            <Phone className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-            <span>9257575393</span>
-          </a>
-
           {/* Mobile Hamburger Menu */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -115,16 +109,23 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
       {mobileMenuOpen && (
         <div className="lg:hidden bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800 px-4 pt-3 pb-6 space-y-3 animate-fadeIn">
           <div className="grid grid-cols-2 gap-2 pb-2">
-            {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="px-4 py-2.5 text-center rounded-xl bg-zinc-900/60 text-zinc-200 hover:bg-amber-500/20 hover:text-amber-400 font-medium text-xs border border-zinc-800/80 transition-all"
-              >
-                {link.name}
-              </a>
-            ))}
+            {navLinks.map((link) => {
+              const isActive = location.pathname === link.path;
+              return (
+                <Link
+                  key={link.name}
+                  to={link.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-2.5 text-center rounded-xl font-medium text-xs border transition-all ${
+                    isActive
+                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 font-bold'
+                      : 'bg-zinc-900/60 text-zinc-200 hover:bg-amber-500/20 hover:text-amber-400 border-zinc-800/80'
+                  }`}
+                >
+                  {link.name}
+                </Link>
+              );
+            })}
           </div>
 
           <div className="pt-1">
@@ -144,3 +145,4 @@ export default function Navbar({ onDataAddClick, onOpenCart, onOpenTracking }) {
     </header>
   );
 }
+

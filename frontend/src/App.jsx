@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Preloader from './components/Preloader';
 import Navbar from './components/Navbar';
-import Hero from './components/Hero';
-import AboutUs from './components/AboutUs';
-import WholesaleSection from './components/WholesaleSection';
-import Collection from './components/Collection';
-import WhyChooseUs from './components/WhyChooseUs';
-import Gallery from './components/Gallery';
-import LocationSection from './components/LocationSection';
-import ContactSection from './components/ContactSection';
 import MobileActionBar from './components/MobileActionBar';
-import Footer from './components/Footer';
+import ScrollToTop from './components/ScrollToTop';
+
+// Page Components
+import HomePage from './pages/HomePage';
+import AboutPage from './pages/AboutPage';
+import CollectionPage from './pages/CollectionPage';
+import WholesalePage from './pages/WholesalePage';
+import GalleryPage from './pages/GalleryPage';
+import ContactPage from './pages/ContactPage';
+import ProductManagement from './pages/ProductManagement';
+import DailySalesReportPage from './pages/DailySalesReportPage';
+import MonthlySalesReportPage from './pages/MonthlySalesReportPage';
+import OrdersReportPage from './pages/OrdersReportPage';
 
 // Security & Admin Modals
 import SecurityModal from './components/SecurityModal';
@@ -24,8 +29,13 @@ import CheckoutModal from './components/CheckoutModal';
 import OrderConfirmationModal from './components/OrderConfirmationModal';
 import OrderTrackingModal from './components/OrderTrackingModal';
 
-export default function App() {
-  const [loading, setLoading] = useState(true);
+import { getApiUrl } from './config/api';
+
+function MainAppContent() {
+  const location = useLocation();
+  const isReportPage = location.pathname.startsWith('/admin/reports');
+
+  const [loading, setLoading] = useState(() => !window.location.pathname.startsWith('/admin/reports'));
 
   // Admin & Security States
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
@@ -41,59 +51,108 @@ export default function App() {
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
 
   useEffect(() => {
-    // Direct URL Path & Hash listener (/admin, #track, #cart, etc.)
-    const checkDirectUrlRoute = () => {
-      const pathname = window.location.pathname;
+    // Route protection and token verification listener
+    const verifyAndCheckAuth = async () => {
+      const pathname = location.pathname;
       const hash = window.location.hash;
 
-      if (pathname.includes('/admin') || hash === '#admin' || hash === '#register' || hash === '#data-add' || pathname.includes('/register')) {
-        const savedToken = sessionStorage.getItem('lk_access_token');
-        if (savedToken) {
-          setAccessToken(savedToken);
-          setIsDataEntryOpen(true);
-          setIsSecurityOpen(false);
-        } else {
+      const isAdminRoute =
+        pathname === '/admin' ||
+        pathname.startsWith('/admin/') ||
+        pathname === '/product-management' ||
+        pathname.includes('/register') ||
+        hash === '#admin' ||
+        hash === '#register' ||
+        hash === '#data-add';
+
+      if (isAdminRoute) {
+        const savedToken = sessionStorage.getItem('lk_access_token') || localStorage.getItem('lk_access_token') || '';
+
+        if (!savedToken) {
+          setAccessToken('');
           setIsDataEntryOpen(false);
           setIsSecurityOpen(true);
+          return;
         }
-      } else if (hash === '#track' || pathname.includes('/track')) {
-        handleOpenTracking();
-      } else if (hash === '#cart' || pathname.includes('/cart')) {
-        setIsCartOpen(true);
+
+        try {
+          const res = await fetch(getApiUrl('/auth/verify-token'), {
+            headers: { Authorization: `Bearer ${savedToken}` },
+          });
+          const data = await res.json().catch(() => null);
+
+          if (res.ok && data && data.valid) {
+            setAccessToken(savedToken);
+            if (pathname.startsWith('/admin/reports') || pathname === '/product-management' || pathname === '/admin/products') {
+              setIsDataEntryOpen(false);
+              setIsSecurityOpen(false);
+            } else {
+              setIsDataEntryOpen(true);
+              setIsSecurityOpen(false);
+            }
+          } else {
+            sessionStorage.removeItem('lk_access_token');
+            localStorage.removeItem('lk_access_token');
+            setAccessToken('');
+            setIsDataEntryOpen(false);
+            setIsSecurityOpen(true);
+          }
+        } catch {
+          try {
+            const payload = JSON.parse(atob(savedToken.split('.')[1]));
+            if (payload && payload.exp && payload.exp * 1000 > Date.now()) {
+              setAccessToken(savedToken);
+              if (pathname.startsWith('/admin/reports') || pathname === '/product-management' || pathname === '/admin/products') {
+                setIsDataEntryOpen(false);
+                setIsSecurityOpen(false);
+              } else {
+                setIsDataEntryOpen(true);
+                setIsSecurityOpen(false);
+              }
+            } else {
+              throw new Error('Expired token');
+            }
+          } catch {
+            sessionStorage.removeItem('lk_access_token');
+            localStorage.removeItem('lk_access_token');
+            setAccessToken('');
+            setIsDataEntryOpen(false);
+            setIsSecurityOpen(true);
+          }
+        }
+      } else {
+        if (hash === '#track' || pathname.includes('/track')) {
+          handleOpenTracking();
+        } else if (hash === '#cart' || pathname.includes('/cart')) {
+          setIsCartOpen(true);
+        }
       }
     };
 
-    checkDirectUrlRoute();
-    window.addEventListener('popstate', checkDirectUrlRoute);
-    window.addEventListener('hashchange', checkDirectUrlRoute);
-    return () => {
-      window.removeEventListener('popstate', checkDirectUrlRoute);
-      window.removeEventListener('hashchange', checkDirectUrlRoute);
-    };
-  }, []);
+    verifyAndCheckAuth();
 
-  const handleDataAddClick = () => {
-    const savedToken = sessionStorage.getItem('lk_access_token');
-    if (savedToken) {
-      setAccessToken(savedToken);
-      setIsDataEntryOpen(true);
-      setIsSecurityOpen(false);
-    } else {
-      setIsDataEntryOpen(false);
-      setIsSecurityOpen(true);
-    }
-    if (window.location.pathname !== '/admin') {
-      window.history.pushState(null, '', '/admin');
-    }
-  };
+    const handleWindowRoute = () => verifyAndCheckAuth();
+    window.addEventListener('popstate', handleWindowRoute);
+    window.addEventListener('hashchange', handleWindowRoute);
+    return () => {
+      window.removeEventListener('popstate', handleWindowRoute);
+      window.removeEventListener('hashchange', handleWindowRoute);
+    };
+  }, [location.pathname, location.hash]);
 
   const handleAuthSuccess = (token) => {
     setAccessToken(token);
     sessionStorage.setItem('lk_access_token', token);
     setIsSecurityOpen(false);
-    setIsDataEntryOpen(true);
-    if (window.location.pathname !== '/admin') {
-      window.history.pushState(null, '', '/admin');
+
+    const pathname = window.location.pathname;
+    if (pathname.startsWith('/admin/reports') || pathname === '/product-management' || pathname === '/admin/products') {
+      setIsDataEntryOpen(false);
+    } else {
+      setIsDataEntryOpen(true);
+      if (window.location.pathname !== '/admin') {
+        window.history.pushState(null, '', '/admin');
+      }
     }
   };
 
@@ -103,111 +162,122 @@ export default function App() {
   };
 
   return (
-    <CartProvider>
-      {loading && <Preloader onComplete={() => setLoading(false)} />}
-      
+    <>
+      {/* ─── RESTORED OPENING / PRELOADER ANIMATION ───────────────────────── */}
+      {loading && !isReportPage && (
+        <Preloader onComplete={() => setLoading(false)} />
+      )}
+
       <div
         className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-amber-500 selection:text-zinc-950"
         style={{
-          opacity: loading ? 0 : 1,
+          opacity: loading && !isReportPage ? 0 : 1,
           transition: 'opacity 0.5s ease',
         }}
       >
-        {/* Header Navigation */}
-        <Navbar
+        <ScrollToTop />
+
+        {/* Header Navigation - Hidden on Standalone Admin Report Pages */}
+        {!isReportPage && (
+          <Navbar
+            onOpenCart={() => setIsCartOpen(true)}
+            onOpenTracking={() => handleOpenTracking('')}
+          />
+        )}
+
+      <main>
+        <Routes>
+          <Route path="/" element={<HomePage onProductSelect={(prod) => setSelectedProduct(prod)} />} />
+          <Route path="/admin" element={<HomePage onProductSelect={(prod) => setSelectedProduct(prod)} />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/collection" element={<CollectionPage onProductSelect={(prod) => setSelectedProduct(prod)} />} />
+          <Route path="/wholesale" element={<WholesalePage />} />
+          <Route path="/gallery" element={<GalleryPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/product-management" element={<ProductManagement />} />
+          <Route path="/admin/products" element={<ProductManagement />} />
+          <Route path="/admin/reports/daily" element={<DailySalesReportPage accessToken={accessToken} />} />
+          <Route path="/admin/reports/monthly" element={<MonthlySalesReportPage accessToken={accessToken} />} />
+          <Route path="/admin/reports/orders" element={<OrdersReportPage accessToken={accessToken} />} />
+          <Route path="*" element={<HomePage onProductSelect={(prod) => setSelectedProduct(prod)} />} />
+        </Routes>
+      </main>
+      
+      {/* Mobile Action Bar - Hidden on Standalone Admin Report Pages */}
+      {!isReportPage && (
+        <MobileActionBar
           onOpenCart={() => setIsCartOpen(true)}
           onOpenTracking={() => handleOpenTracking('')}
         />
+      )}
 
-        <main>
-          <Hero />
-          <AboutUs />
-          <WholesaleSection />
+      {/* ─── E-COMMERCE MODALS ───────────────────────────────────────── */}
+      <ProductDetailsModal
+        product={selectedProduct}
+        isOpen={!!selectedProduct}
+        onClose={() => setSelectedProduct(null)}
+        onBuyNow={() => setIsCheckoutOpen(true)}
+      />
 
-          {/* Footwear Collection Grid with Product Selection */}
-          <Collection
-            onProductSelect={(prod) => setSelectedProduct(prod)}
-          />
+      <CartDrawer
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        onProceedToCheckout={() => setIsCheckoutOpen(true)}
+      />
 
-          <WhyChooseUs />
-          <Gallery />
-          <LocationSection />
-          <ContactSection />
-        </main>
+      <CheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        onOrderPlaced={(orderData) => setPlacedOrder(orderData)}
+      />
 
-        <Footer />
-        
-        {/* Mobile Action Bar */}
-        <MobileActionBar />
+      <OrderConfirmationModal
+        order={placedOrder}
+        isOpen={!!placedOrder}
+        onClose={() => setPlacedOrder(null)}
+        onTrackOrder={(id) => handleOpenTracking(id)}
+      />
 
-        {/* ─── E-COMMERCE MODALS ───────────────────────────────────────── */}
+      <OrderTrackingModal
+        isOpen={isTrackingOpen}
+        onClose={() => setIsTrackingOpen(false)}
+        initialOrderId={trackingOrderId}
+      />
 
-        {/* 1. Product Details Viewer */}
-        <ProductDetailsModal
-          product={selectedProduct}
-          isOpen={!!selectedProduct}
-          onClose={() => setSelectedProduct(null)}
-          onBuyNow={() => setIsCheckoutOpen(true)}
-        />
+      {/* ─── ADMIN & SECURITY MODALS ──────────────────────────────────── */}
+      <SecurityModal
+        isOpen={isSecurityOpen}
+        onClose={() => {
+          setIsSecurityOpen(false);
+          if (window.location.pathname.includes('/admin')) {
+            window.history.pushState(null, '', '/');
+          }
+        }}
+        onAuthSuccess={handleAuthSuccess}
+      />
 
-        {/* 2. Shopping Cart Drawer */}
-        <CartDrawer
-          isOpen={isCartOpen}
-          onClose={() => setIsCartOpen(false)}
-          onProceedToCheckout={() => setIsCheckoutOpen(true)}
-        />
-
-        {/* 3. Checkout & COD Form */}
-        <CheckoutModal
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          onOrderPlaced={(orderData) => setPlacedOrder(orderData)}
-        />
-
-        {/* 4. Order Confirmation Banner */}
-        <OrderConfirmationModal
-          order={placedOrder}
-          isOpen={!!placedOrder}
-          onClose={() => setPlacedOrder(null)}
-          onTrackOrder={(id) => handleOpenTracking(id)}
-        />
-
-        {/* 5. Customer Order Tracking */}
-        <OrderTrackingModal
-          isOpen={isTrackingOpen}
-          onClose={() => setIsTrackingOpen(false)}
-          initialOrderId={trackingOrderId}
-        />
-
-        {/* ─── ADMIN & SECURITY MODALS ──────────────────────────────────── */}
-
-        {/* 4-Digit Security PIN & Forgot PIN Modal */}
-        <SecurityModal
-          isOpen={isSecurityOpen}
-          onClose={() => {
-            setIsSecurityOpen(false);
-            if (window.location.pathname.includes('/admin')) {
-              window.history.pushState(null, '', '/');
-            }
-          }}
-          onAuthSuccess={handleAuthSuccess}
-        />
-
-        {/* Admin Portal (Orders Dashboard & Inquiries) */}
-        <DataEntryModal
-          isOpen={isDataEntryOpen}
-          onClose={() => {
-            setIsDataEntryOpen(false);
-            setAccessToken('');
-            sessionStorage.removeItem('lk_access_token');
-            if (window.location.pathname.includes('/admin')) {
-              window.history.pushState(null, '', '/');
-            }
-          }}
-          accessToken={accessToken}
-        />
-
-      </div>
-    </CartProvider>
+      <DataEntryModal
+        isOpen={isDataEntryOpen}
+        onClose={() => {
+          setIsDataEntryOpen(false);
+          if (window.location.pathname === '/admin') {
+            window.history.pushState(null, '', '/');
+          }
+        }}
+        accessToken={accessToken}
+      />
+    </div>
+    </>
   );
 }
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <CartProvider>
+        <MainAppContent />
+      </CartProvider>
+    </BrowserRouter>
+  );
+}
+

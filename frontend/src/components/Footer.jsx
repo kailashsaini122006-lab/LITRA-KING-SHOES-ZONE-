@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Phone, MapPin, ChevronRight, Heart, ShieldCheck } from 'lucide-react';
 import lkLogo from '../assets/lk_logo.jpg';
 
@@ -12,6 +13,15 @@ const InstagramIcon = ({ className = "w-4 h-4" }) => (
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+
+  const footerLinks = [
+    { name: 'Home', path: '/' },
+    { name: 'About', path: '/about' },
+    { name: 'Collection', path: '/collection' },
+    { name: 'Wholesale', path: '/wholesale' },
+    { name: 'Gallery', path: '/gallery' },
+    { name: 'Contact', path: '/contact' },
+  ];
 
   return (
     <footer className="bg-zinc-950 border-t border-zinc-800 text-zinc-400 pt-16 pb-24 md:pb-12">
@@ -48,20 +58,17 @@ export default function Footer() {
               Quick Links
             </h4>
             <ul className="space-y-2.5 text-sm">
-              {['Home', 'About Us', 'Collection', 'Wholesale Offer', 'Gallery', 'Location & Directions', 'Contact'].map((item, idx) => {
-                const linkId = item.toLowerCase().replace(' us', '').replace(' offer', '').replace(' & directions', '');
-                return (
-                  <li key={idx}>
-                    <a
-                      href={`#${linkId === 'home' ? 'home' : linkId}`}
-                      className="hover:text-amber-400 transition-colors flex items-center gap-1.5"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5 text-amber-500" />
-                      <span>{item}</span>
-                    </a>
-                  </li>
-                );
-              })}
+              {footerLinks.map((item, idx) => (
+                <li key={idx}>
+                  <Link
+                    to={item.path}
+                    className="hover:text-amber-400 transition-colors flex items-center gap-1.5"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{item.name}</span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 

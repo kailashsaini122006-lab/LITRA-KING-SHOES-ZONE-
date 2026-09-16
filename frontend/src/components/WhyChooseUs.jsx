@@ -1,33 +1,39 @@
-import React from 'react';
-import { Award, Tag, Sparkles, MapPin, ShieldCheck, ThumbsUp } from 'lucide-react';
+import { Truck, ShieldCheck, Lock, PackageCheck, MapPin } from 'lucide-react';
 
 export default function WhyChooseUs() {
   const reasons = [
     {
-      icon: Award,
-      title: 'Premium Quality',
-      desc: 'Quality footwear for everyday use crafted with comfortable materials and durable soles.',
+      icon: Truck,
+      title: '🚚 Home Delivery',
+      desc: 'Fast doorstep delivery to your location with real-time distance calculation.',
       glowColor: 'hover:border-amber-500/60 hover:shadow-amber-500/10',
       iconBg: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
     },
     {
-      icon: Tag,
-      title: 'Wholesale Prices',
-      desc: 'Special pricing available for bulk orders, ideal for shop owners and resellers.',
-      glowColor: 'hover:border-red-500/60 hover:shadow-red-500/10',
-      iconBg: 'bg-red-600/10 text-red-400 border-red-500/30',
+      icon: ShieldCheck,
+      title: '💵 Cash on Delivery',
+      desc: 'Pay conveniently with Cash on Delivery (COD) or UPI when your shoes arrive.',
+      glowColor: 'hover:border-emerald-500/60 hover:shadow-emerald-500/10',
+      iconBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
     },
     {
-      icon: Sparkles,
-      title: 'Latest Styles',
-      desc: 'Modern and stylish footwear collections continuously updated with trending designs.',
-      glowColor: 'hover:border-amber-500/60 hover:shadow-amber-500/10',
-      iconBg: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+      icon: Lock,
+      title: '🔒 Secure Checkout',
+      desc: '100% safe checkout with verified order processing and instant order ID.',
+      glowColor: 'hover:border-blue-500/60 hover:shadow-blue-500/10',
+      iconBg: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    },
+    {
+      icon: PackageCheck,
+      title: '📦 Order Tracking',
+      desc: 'Track your footwear shipment status live using your Order ID or phone number.',
+      glowColor: 'hover:border-purple-500/60 hover:shadow-purple-500/10',
+      iconBg: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
     },
     {
       icon: MapPin,
-      title: 'Trusted Local Store',
-      desc: 'Serving customers in Chomu, Rajasthan with transparent service and reliable footwear.',
+      title: '📍 LITRA KING, Chomu',
+      desc: 'Trusted local footwear store in Chomu, Rajasthan serving retail and wholesale.',
       glowColor: 'hover:border-amber-500/60 hover:shadow-amber-500/10',
       iconBg: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
     },

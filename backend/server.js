@@ -11,6 +11,7 @@ const authRoutes = require('./routes/authRoutes');
 const dataEntryRoutes = require('./routes/dataEntryRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const deliveryHandoverRoutes = require('./routes/deliveryHandoverRoutes');
 const productController = require('./controllers/productController');
 
 const app = express();
@@ -55,6 +56,16 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+const path = require('path');
+const fs = require('fs');
+
+// Ensure uploads folder exists for product images
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
+
 // ─── Body Parser ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -76,8 +87,16 @@ app.use('/api/auth', authRoutes);
 app.use('/api/data-entry', dataEntryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/delivery-handover', deliveryHandoverRoutes);
 
 // Direct Route Aliases for maximum compatibility
+const orderController = require('./controllers/orderController');
+const authMiddleware = require('./middleware/authMiddleware');
+
+app.get('/api/orders/reports/daily', authMiddleware, orderController.getDailySalesReport);
+app.get('/api/orders/reports/monthly', authMiddleware, orderController.getMonthlySalesReport);
+app.get('/api/orders/reports/orders', authMiddleware, orderController.getOrdersReport);
+
 app.post('/api/verify-pin', authController.verifyPin);
 app.post('/api/login', authController.login);
 app.post('/api/verify-password', authController.login);

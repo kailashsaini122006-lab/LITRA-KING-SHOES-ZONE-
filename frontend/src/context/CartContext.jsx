@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+import { calculateCustomerDeliveryDistance, calculateDeliveryChargeFromDistance, calculateHaversineDistance, SHOP_LOCATION } from '../utils/deliveryUtils';
+
 const CartContext = createContext();
 
 export function CartProvider({ children }) {
@@ -29,6 +31,14 @@ export function CartProvider({ children }) {
     }
   });
 
+  // Shared Delivery Distance & Delivery Charge State
+  const [deliveryDistance, setDeliveryDistance] = useState(null);
+  const [deliveryCharge, setDeliveryCharge] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationSuccess, setLocationSuccess] = useState('');
+  const [locationError, setLocationError] = useState('');
+  const [locationCoords, setLocationCoords] = useState(null);
+
   useEffect(() => {
     try {
       localStorage.setItem('lk_cart_items', JSON.stringify(cartItems));
@@ -51,17 +61,111 @@ export function CartProvider({ children }) {
   }, [checkoutMode, buyNowItem]);
 
   /**
+   * Detect Customer GPS Location and update delivery distance & charge
+   */
+  const detectLocation = () => {
+    if (locationLoading) return;
+
+    setLocationError('');
+    setLocationSuccess('');
+
+    if (typeof window === 'undefined' || !navigator || !navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser. Please enter your address/pincode manually.');
+      return;
+    }
+
+    setLocationLoading(true);
+
+    const options = {
+      enableHighAccuracy: true, // High accuracy hardware GPS positioning
+      timeout: 20000,
+      maximumAge: 0,
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (!position || !position.coords) {
+          setLocationError('Unable to determine your current location. Please check your network or enter Pincode manually.');
+          setLocationSuccess('');
+          setLocationLoading(false);
+          return;
+        }
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setLocationCoords({ lat, lng });
+        const distKm = calculateHaversineDistance(SHOP_LOCATION.lat, SHOP_LOCATION.lng, lat, lng);
+        const charge = calculateDeliveryChargeFromDistance(distKm);
+        setDeliveryDistance(distKm);
+        setDeliveryCharge(charge);
+        setLocationError('');
+        setLocationSuccess(`GPS Location detected successfully! (${distKm} km from store)`);
+        setLocationLoading(false);
+      },
+      (err) => {
+        setLocationSuccess('');
+        const code = err ? err.code : 0;
+        if (code === 1 || (err && err.PERMISSION_DENIED && code === err.PERMISSION_DENIED)) {
+          setLocationError('Location permission was denied or location service is disabled. Please allow location access for this site and try again, or enter your Pincode manually.');
+        } else if (code === 2 || (err && err.POSITION_UNAVAILABLE && code === err.POSITION_UNAVAILABLE)) {
+          setLocationError('Unable to determine your current location. Please check your network or enter Pincode manually.');
+        } else if (code === 3 || (err && err.TIMEOUT && code === err.TIMEOUT)) {
+          setLocationError('Location request timed out. Please try again or enter Pincode manually.');
+        } else {
+          setLocationError('Unable to determine your current location. Please check your network or enter Pincode manually.');
+        }
+        setLocationLoading(false);
+      },
+      options
+    );
+  };
+
+  /**
+   * Update Delivery distance & charge from Pincode/Address lookup
+   */
+  const updateDeliveryFromPincode = async (pincode) => {
+    const cleanPincode = (pincode || '').toString().trim().replace(/\D/g, '');
+    const hasGps = locationCoords && locationCoords.lat !== undefined && locationCoords.lat !== null && locationCoords.lng !== undefined && locationCoords.lng !== null;
+
+    if (!cleanPincode && !hasGps) {
+      setDeliveryDistance(null);
+      setDeliveryCharge(null);
+      return { success: false, message: '' };
+    }
+
+    setLocationLoading(true);
+
+    const result = await calculateCustomerDeliveryDistance({
+      pincode: cleanPincode,
+      lat: hasGps ? locationCoords.lat : null,
+      lng: hasGps ? locationCoords.lng : null,
+    });
+
+    if (result.success && result.distanceKm !== null && result.deliveryCharge !== null) {
+      setDeliveryDistance(result.distanceKm);
+      setDeliveryCharge(result.deliveryCharge);
+      setLocationLoading(false);
+      return result;
+    } else {
+      setDeliveryDistance(null);
+      setDeliveryCharge(null);
+      setLocationLoading(false);
+      return result;
+    }
+  };
+
+  /**
    * Start checkout for a single selected product (Buy Now)
    */
   const startBuyNow = (product, size, color, quantity = 1, imageOverride = '') => {
     const selectedSize = Number(size) || (product.sizes ? product.sizes[0] : 8);
     const selectedColor = color || (product.colors ? product.colors[0] : 'Black');
     const selectedQty = Math.max(1, Number(quantity) || 1);
-    const itemKey = `${product.productId || product._id}_${selectedSize}_${selectedColor}`;
+    const itemKey = `${product._id || product.productId}_${selectedSize}_${selectedColor}`;
     const img = imageOverride || (Array.isArray(product.images) && product.images.length ? product.images[0] : (product.img || ''));
 
     const item = {
       key: itemKey,
+      _id: product._id || product.productId,
       productId: product.productId || product._id,
       name: product.name,
       brand: product.brand || 'LITRA KING',
@@ -149,23 +253,27 @@ export function CartProvider({ children }) {
     const selectedSize = Number(size) || (product.sizes ? product.sizes[0] : 8);
     const selectedColor = color || (product.colors ? product.colors[0] : 'Black');
     const selectedQty = Math.max(1, Number(quantity) || 1);
-    const itemKey = `${product.productId || product._id}_${selectedSize}_${selectedColor}`;
+    const itemKey = `${product._id || product.productId}_${selectedSize}_${selectedColor}`;
 
     setCartItems((prevItems) => {
       const existingIndex = prevItems.findIndex((item) => item.key === itemKey);
 
       if (existingIndex > -1) {
-        const updated = [...prevItems];
-        const newQty = updated[existingIndex].quantity + selectedQty;
-        const maxStock = product.stock !== undefined ? product.stock : 99;
-        updated[existingIndex].quantity = Math.min(newQty, maxStock);
-        return updated;
+        return prevItems.map((item, index) => {
+          if (index === existingIndex) {
+            const newQty = item.quantity + selectedQty;
+            const maxStock = product.stock !== undefined ? product.stock : 99;
+            return { ...item, quantity: Math.min(newQty, maxStock) };
+          }
+          return item;
+        });
       }
 
       return [
         ...prevItems,
         {
           key: itemKey,
+          _id: product._id || product.productId,
           productId: product.productId || product._id,
           name: product.name,
           brand: product.brand || 'LITRA KING',
@@ -234,6 +342,19 @@ export function CartProvider({ children }) {
         cartItems,
         checkoutMode,
         buyNowItem,
+        deliveryDistance,
+        deliveryCharge,
+        locationLoading,
+        locationSuccess,
+        locationError,
+        locationCoords,
+        detectLocation,
+        updateDeliveryFromPincode,
+        setDeliveryDistance,
+        setDeliveryCharge,
+        setLocationSuccess,
+        setLocationError,
+        setLocationCoords,
         startBuyNow,
         startCartCheckout,
         updateBuyNowQuantity,

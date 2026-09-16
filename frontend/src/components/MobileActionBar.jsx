@@ -1,28 +1,58 @@
 import React from 'react';
-import { Phone, MessageCircle } from 'lucide-react';
+import { Home, Grid, ShoppingBag, PackageCheck, Phone, MessageCircle } from 'lucide-react';
+import { useCart } from '../context/CartContext';
 
-export default function MobileActionBar() {
+export default function MobileActionBar({ onOpenCart, onOpenTracking }) {
+  const { getCartCount } = useCart();
+  const cartCount = getCartCount();
+
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-lg border-t border-zinc-800 p-3 shadow-2xl">
-      <div className="grid grid-cols-2 gap-3 max-w-md mx-auto">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800 px-2 py-2 shadow-2xl">
+      <div className="grid grid-cols-4 gap-1 max-w-md mx-auto text-center">
+        {/* 1. Home */}
         <a
-          href="tel:9257575393"
-          className="flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 font-extrabold py-3 rounded-xl shadow-lg text-sm"
+          href="#home"
+          className="flex flex-col items-center justify-center py-1 text-[11px] font-bold text-zinc-400 hover:text-amber-400 transition-colors"
         >
-          <Phone className="w-4 h-4 fill-zinc-950" />
-          <span>Call: 9257575393</span>
+          <Home className="w-5 h-5 mb-0.5" />
+          <span>Home</span>
         </a>
 
+        {/* 2. Categories / Shop */}
         <a
-          href="https://wa.me/919257575393?text=Hello%20Litra%20King%20Shoes%20Zone,%20I%20am%20interested%20in%20Footwear%20orders."
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg text-sm"
+          href="#collection"
+          className="flex flex-col items-center justify-center py-1 text-[11px] font-bold text-zinc-400 hover:text-amber-400 transition-colors"
         >
-          <MessageCircle className="w-4 h-4 fill-white" />
-          <span>WhatsApp</span>
+          <Grid className="w-5 h-5 mb-0.5" />
+          <span>Categories</span>
         </a>
+
+        {/* 3. Cart */}
+        <button
+          onClick={onOpenCart}
+          className="relative flex flex-col items-center justify-center py-1 text-[11px] font-bold text-zinc-400 hover:text-amber-400 transition-colors"
+        >
+          <div className="relative">
+            <ShoppingBag className="w-5 h-5 mb-0.5" />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-2 bg-amber-500 text-zinc-950 text-[10px] font-mono font-black w-4 h-4 rounded-full flex items-center justify-center shadow">
+                {cartCount}
+              </span>
+            )}
+          </div>
+          <span>Cart</span>
+        </button>
+
+        {/* 4. Orders */}
+        <button
+          onClick={onOpenTracking}
+          className="flex flex-col items-center justify-center py-1 text-[11px] font-bold text-zinc-400 hover:text-amber-400 transition-colors"
+        >
+          <PackageCheck className="w-5 h-5 mb-0.5 text-amber-400" />
+          <span>Orders</span>
+        </button>
       </div>
     </div>
   );
 }
+

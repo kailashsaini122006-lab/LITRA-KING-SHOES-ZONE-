@@ -169,13 +169,18 @@ export default function ContactSection() {
                 </a>
 
                 {/* 3. Get Directions */}
-                <a
-                  href="#location"
-                  className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold py-3.5 px-4 rounded-xl text-sm border border-zinc-700 transition-all"
+                <button
+                  onClick={() => {
+                    const loc = document.getElementById('location');
+                    if (loc) {
+                      loc.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold py-3.5 px-4 rounded-xl text-sm border border-zinc-700 transition-all cursor-pointer"
                 >
                   <Navigation className="w-4 h-4 text-amber-400" />
                   <span>Directions</span>
-                </a>
+                </button>
               </div>
             </div>
 

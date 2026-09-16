@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, PackageCheck, MapPin, Truck, ShoppingBag, CreditCard, ShieldCheck } from 'lucide-react';
+import { X, CheckCircle2, PackageCheck, MapPin, Truck, ShoppingBag, CreditCard, ShieldCheck } from 'lucide-react';
 
 export default function OrderConfirmationModal({ order, isOpen, onClose, onTrackOrder }) {
   if (!isOpen || !order) return null;
@@ -7,10 +7,24 @@ export default function OrderConfirmationModal({ order, isOpen, onClose, onTrack
   const isUpi = order.paymentMethod === 'UPI';
   const isOnlinePayment = order.paymentMethod === 'Online Payment' || order.paymentMethod === 'Razorpay' || isUpi;
 
+  const distVal = order.deliveryDistanceKm !== undefined && order.deliveryDistanceKm !== null
+    ? order.deliveryDistanceKm
+    : order.deliveryDistance;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
       <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 p-6 sm:p-8 space-y-6 text-center">
         
+        {/* Top-Right X / Close Icon */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors z-10"
+          title="Close"
+          aria-label="Close modal"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
         {/* Animated Check Icon */}
         <div className="w-20 h-20 bg-emerald-500/20 border-2 border-emerald-500/50 rounded-full flex items-center justify-center mx-auto text-emerald-400 shadow-xl shadow-emerald-500/20 animate-bounce">
           <CheckCircle2 className="w-10 h-10" />
@@ -35,6 +49,18 @@ export default function OrderConfirmationModal({ order, isOpen, onClose, onTrack
               #{order.orderId}
             </span>
           </div>
+
+          {distVal !== undefined && distVal !== null && (
+            <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 px-3.5 py-2.5 rounded-xl text-xs text-amber-300 font-semibold">
+              <span className="flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Distance from LITRA KING Store:</span>
+              </span>
+              <span className="font-mono font-black text-amber-400 text-sm">
+                {Number(distVal).toFixed(1)} km
+              </span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 text-xs pt-1">
             <div>
@@ -70,8 +96,17 @@ export default function OrderConfirmationModal({ order, isOpen, onClose, onTrack
             )}
 
             <div>
-              <span className="text-zinc-500 block">Customer Name:</span>
-              <span className="font-semibold text-zinc-200 mt-0.5 block">{order.customer?.name}</span>
+              <span className="text-zinc-500 block">Subtotal / Products:</span>
+              <span className="font-mono font-bold text-zinc-200 text-xs mt-0.5 block">
+                ₹{order.subtotal || order.totalAmount}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-zinc-500 block">Delivery Charge:</span>
+              <span className="font-mono font-bold text-emerald-400 text-xs mt-0.5 block">
+                ₹{order.deliveryCharge ?? 0}
+              </span>
             </div>
 
             <div>
@@ -99,6 +134,14 @@ export default function OrderConfirmationModal({ order, isOpen, onClose, onTrack
             <span>
               Shipping to: {order.customer?.address}, {order.customer?.city}, {order.customer?.state} - {order.customer?.pincode}
             </span>
+          </div>
+
+          {/* Delivery OTP Notice */}
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-300 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+            <p className="text-zinc-300 text-[11px] leading-tight">
+              <strong>Delivery Security:</strong> जब Delivery Executive आपके पते पर पहुँचेगा (Customer Reached), तब आपके मोबाइल (<strong className="text-amber-400">{order.customer?.phone}</strong>) पर Delivery OTP आएगा। सामान लेते समय यह OTP Delivery Boy को बताएं।
+            </p>
           </div>
         </div>
 
