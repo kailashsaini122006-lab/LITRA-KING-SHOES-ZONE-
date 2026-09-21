@@ -372,11 +372,16 @@ exports.verifyRazorpayPayment = async (req, res) => {
       longitude: lngVal,
       items: validatedItems,
       subtotal: calculatedSubtotal,
+      deliveryDistance,
+      deliveryDistanceKm: deliveryDistance,
       deliveryCharge,
       totalAmount: grandTotal,
       paymentMethod: 'Online Payment',
       paymentStatus: 'Paid',
       orderStatus: 'Pending',
+      paidAt: new Date(),
+      paymentDate: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      paymentTime: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
       transactionId: razorpay_payment_id,
       razorpayOrderId: razorpay_order_id,
     });
@@ -805,15 +810,24 @@ exports.updateOrderStatus = async (req, res) => {
 
     if (orderStatus) order.orderStatus = orderStatus;
     if (deliveryBoyStatus) {
-      order.deliveryBoyStatus = (deliveryBoyStatus === 'DELIVERY BOY RECEIVED' || deliveryBoyStatus === 'Received')
-        ? 'DELIVERY BOY RECEIVED'
-        : 'DELIVERY BOY PENDING';
+      const isReceived = (deliveryBoyStatus === 'DELIVERY BOY RECEIVED' || deliveryBoyStatus === 'Received');
+      order.deliveryBoyStatus = isReceived ? 'DELIVERY BOY RECEIVED' : 'DELIVERY BOY PENDING';
+      if (isReceived && (!order.orderStatus || order.orderStatus === 'Pending')) {
+        order.orderStatus = 'Confirmed';
+      }
     }
 
     if (paymentStatus) {
       order.paymentStatus = paymentStatus;
       if (paymentStatus === 'Paid') {
         if (!order.paidAt) order.paidAt = new Date();
+        const dObj = order.paidAt || new Date();
+        if (!order.paymentDate) {
+          order.paymentDate = dObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        if (!order.paymentTime) {
+          order.paymentTime = dObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        }
       }
     }
 
@@ -1068,8 +1082,16 @@ exports.verifyDeliveryOtp = async (req, res) => {
 
     // OTP Verified Successfully!
     order.orderStatus = 'Delivered';
-    if (order.paymentMethod === 'COD') {
+    if (order.paymentMethod === 'COD' || order.paymentStatus !== 'Paid') {
       order.paymentStatus = 'Paid';
+      const dObj = new Date();
+      if (!order.paidAt) order.paidAt = dObj;
+      if (!order.paymentDate) {
+        order.paymentDate = dObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+      if (!order.paymentTime) {
+        order.paymentTime = dObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      }
     }
     order.otpVerified = true;
     order.otpVerifiedAt = new Date();
@@ -1545,7 +1567,10 @@ exports.sendOrderToDeliveryBoy = async (req, res) => {
     order.deliveryBoyName = deliveryBoyName.trim();
     order.deliveryBoyPhone = deliveryBoyPhone ? deliveryBoyPhone.trim() : '';
     order.deliverySendStatus = 'DELIVERY SENT';
-    order.deliveryBoyStatus = 'DELIVERY SENT';
+    order.deliveryBoyStatus = 'DELIVERY BOY RECEIVED';
+    if (!order.orderStatus || order.orderStatus === 'Pending') {
+      order.orderStatus = 'Confirmed';
+    }
     order.deliverySendDate = formattedDate;
     order.deliverySendTime = formattedTime;
     order.deliverySentAt = dObj;

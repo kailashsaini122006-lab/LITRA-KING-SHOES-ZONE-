@@ -122,9 +122,10 @@ export function CartProvider({ children }) {
   /**
    * Update Delivery distance & charge from Pincode/Address lookup
    */
-  const updateDeliveryFromPincode = async (pincode) => {
+  const updateDeliveryFromPincode = async (pincode, customCoords = null) => {
     const cleanPincode = (pincode || '').toString().trim().replace(/\D/g, '');
-    const hasGps = locationCoords && locationCoords.lat !== undefined && locationCoords.lat !== null && locationCoords.lng !== undefined && locationCoords.lng !== null;
+    const activeCoords = customCoords || locationCoords;
+    const hasGps = activeCoords && activeCoords.lat !== undefined && activeCoords.lat !== null && activeCoords.lng !== undefined && activeCoords.lng !== null;
 
     if (!cleanPincode && !hasGps) {
       setDeliveryDistance(null);
@@ -136,8 +137,8 @@ export function CartProvider({ children }) {
 
     const result = await calculateCustomerDeliveryDistance({
       pincode: cleanPincode,
-      lat: hasGps ? locationCoords.lat : null,
-      lng: hasGps ? locationCoords.lng : null,
+      lat: hasGps ? activeCoords.lat : null,
+      lng: hasGps ? activeCoords.lng : null,
     });
 
     if (result.success && result.distanceKm !== null && result.deliveryCharge !== null) {

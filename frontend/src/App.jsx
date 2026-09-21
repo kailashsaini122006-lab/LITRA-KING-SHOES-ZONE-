@@ -56,14 +56,7 @@ function MainAppContent() {
       const pathname = location.pathname;
       const hash = window.location.hash;
 
-      const isAdminRoute =
-        pathname === '/admin' ||
-        pathname.startsWith('/admin/') ||
-        pathname === '/product-management' ||
-        pathname.includes('/register') ||
-        hash === '#admin' ||
-        hash === '#register' ||
-        hash === '#data-add';
+      const isAdminRoute = false;
 
       if (isAdminRoute) {
         const savedToken = sessionStorage.getItem('lk_access_token') || localStorage.getItem('lk_access_token') || '';
@@ -188,17 +181,11 @@ function MainAppContent() {
       <main>
         <Routes>
           <Route path="/" element={<HomePage onProductSelect={(prod) => setSelectedProduct(prod)} />} />
-          <Route path="/admin" element={<HomePage onProductSelect={(prod) => setSelectedProduct(prod)} />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/collection" element={<CollectionPage onProductSelect={(prod) => setSelectedProduct(prod)} />} />
           <Route path="/wholesale" element={<WholesalePage />} />
           <Route path="/gallery" element={<GalleryPage />} />
           <Route path="/contact" element={<ContactPage />} />
-          <Route path="/product-management" element={<ProductManagement />} />
-          <Route path="/admin/products" element={<ProductManagement />} />
-          <Route path="/admin/reports/daily" element={<DailySalesReportPage accessToken={accessToken} />} />
-          <Route path="/admin/reports/monthly" element={<MonthlySalesReportPage accessToken={accessToken} />} />
-          <Route path="/admin/reports/orders" element={<OrdersReportPage accessToken={accessToken} />} />
           <Route path="*" element={<HomePage onProductSelect={(prod) => setSelectedProduct(prod)} />} />
         </Routes>
       </main>
@@ -244,28 +231,6 @@ function MainAppContent() {
         initialOrderId={trackingOrderId}
       />
 
-      {/* ─── ADMIN & SECURITY MODALS ──────────────────────────────────── */}
-      <SecurityModal
-        isOpen={isSecurityOpen}
-        onClose={() => {
-          setIsSecurityOpen(false);
-          if (window.location.pathname.includes('/admin')) {
-            window.history.pushState(null, '', '/');
-          }
-        }}
-        onAuthSuccess={handleAuthSuccess}
-      />
-
-      <DataEntryModal
-        isOpen={isDataEntryOpen}
-        onClose={() => {
-          setIsDataEntryOpen(false);
-          if (window.location.pathname === '/admin') {
-            window.history.pushState(null, '', '/');
-          }
-        }}
-        accessToken={accessToken}
-      />
     </div>
     </>
   );

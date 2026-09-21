@@ -1,14 +1,14 @@
 /**
  * Litra King Shoes Zone - Distance & Delivery Charge Utility
  * Single Configurable Shop Location: Main Footwear Market, Chomu, Rajasthan 303702
- * Coordinates: Latitude 27.1704, Longitude 75.7225
+ * Coordinates: Latitude 27.1787383, Longitude 75.719
  */
 
 export const SHOP_LOCATION = {
   name: 'LITRA KING (SHOES ZONE)',
   address: 'Main Footwear Market, Chomu, Rajasthan, 303702',
-  lat: 27.1704,
-  lng: 75.7225,
+  lat: 27.1787383,
+  lng: 75.719,
   pincode: '303702',
 };
 
@@ -73,7 +73,7 @@ export function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
 // Fast coordinate database for Indian PIN codes
 const KNOWN_PINCODES = {
   // Chomu local & immediate surroundings (0-10 km)
-  '303702': { lat: 27.1704, lng: 75.7225, place: 'Chomu Main Market' },
+  '303702': { lat: 27.1787383, lng: 75.719, place: 'Chomu Main Market' },
   '303708': { lat: 27.1600, lng: 75.7300, place: 'Radhaswamibagh / Tankarda, Chomu' },
   '303706': { lat: 27.1900, lng: 75.7900, place: 'Morija, Chomu' },
   '303704': { lat: 27.2100, lng: 75.8000, place: 'Samod' },
@@ -244,51 +244,12 @@ export async function calculateCustomerDeliveryDistance({ pincode, lat, lng }) {
       console.warn('India Post API lookup note:', err.message);
     }
 
-    // 2e. Regional PIN Prefix Fallback (only when external APIs are completely unreachable)
-    let distKm = 350.0;
-    let areaName = 'National Delivery';
-
-    if (cleanPincode === '303702') {
-      distKm = 2.5;
-      areaName = 'Chomu Local PIN';
-    } else if (cleanPincode.startsWith('3037')) {
-      distKm = 8.5;
-      areaName = 'Govindgarh / Samod / Local Chomu Tehsil Area';
-    } else if (cleanPincode.startsWith('302039')) {
-      distKm = 18.5;
-      areaName = 'Harmada / Chomu Border Zone';
-    } else if (cleanPincode.startsWith('302012') || cleanPincode.startsWith('302013')) {
-      distKm = 25.0;
-      areaName = 'North Jaipur Zone';
-    } else if (cleanPincode.startsWith('302')) {
-      distKm = 33.0;
-      areaName = 'Jaipur City Region';
-    } else if (cleanPincode.startsWith('303')) {
-      distKm = 28.0;
-      areaName = 'Jaipur District Outskirts';
-    } else if (cleanPincode.startsWith('332')) {
-      distKm = 75.0;
-      areaName = 'Sikar Region';
-    } else if (
-      cleanPincode.startsWith('30') ||
-      cleanPincode.startsWith('31') ||
-      cleanPincode.startsWith('32') ||
-      cleanPincode.startsWith('33') ||
-      cleanPincode.startsWith('34')
-    ) {
-      distKm = 145.0;
-      areaName = 'Rajasthan State';
-    } else {
-      distKm = 350.0;
-      areaName = 'National Delivery';
-    }
-
-    const charge = calculateDeliveryChargeFromDistance(distKm);
+    // 2e. If pincode location could not be resolved from any reliable coordinate source
     return {
-      success: true,
-      distanceKm: distKm,
-      deliveryCharge: charge,
-      method: `PIN Code ${cleanPincode} (${areaName} - ${distKm} km)`,
+      success: false,
+      distanceKm: null,
+      deliveryCharge: null,
+      message: 'Pincode location not found. Please verify your Pincode or click "Use My Current Location".',
       isGps: false,
     };
   }

@@ -161,37 +161,37 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
                   <span className="font-mono font-bold text-zinc-200">₹{subtotal}</span>
                 </div>
 
-                <div className="flex justify-between items-center text-zinc-400">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-red-500" />
-                    <span>Delivery Distance</span>
-                  </span>
-                  <span className="font-mono font-bold text-amber-400">
-                    {locationLoading ? (
-                      <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
-                    ) : deliveryDistance !== null ? (
-                      `${deliveryDistance} km`
-                    ) : (
-                      <span className="text-[11px] text-amber-400/90 font-sans font-normal">Pending Location</span>
-                    )}
-                  </span>
-                </div>
+                {deliveryDistance !== null && (
+                  <div className="flex justify-between items-center text-zinc-400">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-red-500" />
+                      <span>Delivery Distance</span>
+                    </span>
+                    <span className="font-mono font-bold text-amber-400">
+                      {locationLoading ? (
+                        <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
+                      ) : (
+                        `${deliveryDistance} km`
+                      )}
+                    </span>
+                  </div>
+                )}
 
-                <div className="flex justify-between items-center text-zinc-400">
-                  <span className="flex items-center gap-1">
-                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Delivery Charge</span>
-                  </span>
-                  <span className="font-mono font-bold text-emerald-400">
-                    {locationLoading ? (
-                      <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
-                    ) : deliveryCharge !== null ? (
-                      `₹${deliveryCharge}`
-                    ) : (
-                      <span className="text-[11px] text-amber-400/90 font-sans font-normal">Pending Location</span>
-                    )}
-                  </span>
-                </div>
+                {deliveryCharge !== null && (
+                  <div className="flex justify-between items-center text-zinc-400">
+                    <span className="flex items-center gap-1">
+                      <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Delivery Charge</span>
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {locationLoading ? (
+                        <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
+                      ) : (
+                        `₹${deliveryCharge}`
+                      )}
+                    </span>
+                  </div>
+                )}
 
                 <div className="pt-2 border-t border-zinc-800 flex justify-between text-base font-extrabold text-white">
                   <span>Total Amount</span>

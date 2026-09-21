@@ -49,15 +49,17 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
   // Safe setter helper to avoid ReferenceError/TypeError
   const safeSetLocationCoords = typeof setLocationCoords === 'function' ? setLocationCoords : () => {};
 
-  // Reset location error/success messages when modal opens
+  // Reset location error/success messages and distance/charge when modal opens
   useEffect(() => {
     if (isOpen) {
       if (typeof setLocationError === 'function') setLocationError('');
       if (typeof setLocationSuccess === 'function') setLocationSuccess('');
+      if (typeof setDeliveryDistance === 'function') setDeliveryDistance(null);
+      if (typeof setDeliveryCharge === 'function') setDeliveryCharge(null);
     }
   }, [isOpen]);
 
-  // Calculate real distance from LITRA KING shop whenever PIN code or GPS coordinates update
+  // Calculate real distance from LITRA KING shop whenever 6-digit PIN code or GPS coordinates update
   useEffect(() => {
     let isMounted = true;
 
@@ -65,14 +67,13 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
       const cleanPincode = (formData.pincode || '').toString().trim().replace(/\D/g, '');
       const hasGps = locationCoords && locationCoords.lat !== undefined && locationCoords.lat !== null && locationCoords.lng !== undefined && locationCoords.lng !== null;
 
-      // Priority Rule C:
-      // 1. Valid GPS coordinates -> GPS distance
-      // 2. GPS unavailable/denied/failed -> Pincode-based distance
-      // 3. Neither GPS nor valid pincode available -> clear distance/charge
-      if (hasGps) {
-        await updateDeliveryFromPincode(cleanPincode);
-      } else if (cleanPincode.length === 6) {
-        await updateDeliveryFromPincode(cleanPincode);
+      // Distance is calculated ONLY when a valid 6-digit pincode is present
+      if (cleanPincode.length === 6) {
+        if (hasGps) {
+          await updateDeliveryFromPincode(cleanPincode, locationCoords);
+        } else {
+          await updateDeliveryFromPincode(cleanPincode, null);
+        }
       } else {
         if (isMounted) {
           if (typeof setDeliveryDistance === 'function') setDeliveryDistance(null);
@@ -92,7 +93,9 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
 
   const checkoutItems = getCheckoutItems();
   const subtotal = getCheckoutSubtotal();
-  const grandTotal = subtotal + (deliveryCharge !== null ? deliveryCharge : 0);
+  const cleanPincodeVal = (formData.pincode || '').toString().trim().replace(/\D/g, '');
+  const isPincodeValid = cleanPincodeVal.length === 6;
+  const grandTotal = subtotal + (isPincodeValid && deliveryCharge !== null ? deliveryCharge : 0);
 
   const handleUpdateQuantity = (itemKey, delta) => {
     if (checkoutMode === 'single') {
@@ -624,43 +627,45 @@ export default function CheckoutModal({ isOpen, onClose, onOrderPlaced }) {
                   <span className="font-mono font-bold text-zinc-200">₹{subtotal}</span>
                 </div>
 
-                <div className="flex justify-between items-center text-zinc-400">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Distance from LITRA KING Store</span>
-                  </span>
-                  <span className="font-mono font-bold text-amber-400">
-                    {locationLoading ? (
-                      <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
-                    ) : deliveryDistance !== null ? (
-                      `${Number(deliveryDistance).toFixed(1)} km`
-                    ) : (
-                      <span className="text-[11px] text-amber-400/90 font-sans font-normal">Pending Location</span>
-                    )}
-                  </span>
-                </div>
+                {isPincodeValid && deliveryDistance !== null && (
+                  <div className="flex justify-between items-center text-zinc-400">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Distance from LITRA KING Store</span>
+                    </span>
+                    <span className="font-mono font-bold text-amber-400">
+                      {locationLoading ? (
+                        <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
+                      ) : (
+                        `${Number(deliveryDistance).toFixed(1)} km`
+                      )}
+                    </span>
+                  </div>
+                )}
 
-                <div className="flex justify-between items-center text-zinc-400">
-                  <span className="flex items-center gap-1">
-                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Delivery Charge</span>
-                  </span>
-                  <span className="font-mono font-bold text-emerald-400">
-                    {locationLoading ? (
-                      <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
-                    ) : deliveryCharge !== null ? (
-                      `₹${deliveryCharge}`
-                    ) : (
-                      <span className="text-[11px] text-amber-400/90 font-sans font-normal">Pending Location</span>
-                    )}
-                  </span>
-                </div>
+                {isPincodeValid && deliveryCharge !== null && (
+                  <div className="flex justify-between items-center text-zinc-400">
+                    <span className="flex items-center gap-1">
+                      <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Delivery Charge</span>
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {locationLoading ? (
+                        <span className="text-[11px] text-zinc-400 animate-pulse">Calculating...</span>
+                      ) : (
+                        `₹${deliveryCharge}`
+                      )}
+                    </span>
+                  </div>
+                )}
 
                 <div className="pt-2 border-t border-zinc-800 flex justify-between text-base font-black text-white">
                   <span>Final Total</span>
                   <span className="font-mono text-amber-400 text-xl">
                     ₹{grandTotal}
-                    {deliveryCharge === null && <span className="text-[10px] text-zinc-500 block font-normal font-sans text-right">+ Delivery Fee</span>}
+                    {(!isPincodeValid || deliveryCharge === null) && (
+                      <span className="text-[10px] text-zinc-500 block font-normal font-sans text-right">+ Delivery Fee</span>
+                    )}
                   </span>
                 </div>
               </div>
