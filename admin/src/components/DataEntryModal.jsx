@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { List, X, RefreshCw, ShieldCheck, Package, DollarSign, Truck, Clock, CheckCircle2, XCircle, Search, Eye, Filter, ArrowUpDown, Trash2, MapPin, AlertTriangle, TrendingUp, Calendar, UserCheck, Mail, SlidersHorizontal } from 'lucide-react';
+import { List, X, RefreshCw, ShieldCheck, Package, DollarSign, Truck, Clock, CheckCircle2, XCircle, Search, Eye, Filter, ArrowUpDown, Trash2, MapPin, AlertTriangle, TrendingUp, Calendar, UserCheck, Mail, SlidersHorizontal, FileText } from 'lucide-react';
 import { getApiUrl } from '../config/api';
 import ProductManagement from '../pages/ProductManagement';
 import { SHOP_LOCATION, calculateHaversineDistance } from '../utils/deliveryUtils';
@@ -216,8 +216,11 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
   // Tab 1: Orders State
   const [orders, setOrders] = useState([]);
   const [metrics, setMetrics] = useState(null);
+  const [showSalesReport, setShowSalesReport] = useState(false);
+  const [showReportsModal, setShowReportsModal] = useState(false);
+  const [showControlPanelModal, setShowControlPanelModal] = useState(false);
   const [fetchingOrders, setFetchingOrders] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('New Order');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInputVal, setSearchInputVal] = useState('');
 
@@ -820,7 +823,7 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
       if (cleanSearch) {
         params.append('search', cleanSearch);
       }
-      if (statusFilter !== 'All' && !cleanSearch.includes('@')) {
+      if (statusFilter !== 'All' && statusFilter !== 'Processing' && statusFilter !== 'New Order' && !cleanSearch.includes('@')) {
         params.append('status', statusFilter);
       }
       if ([...params].length > 0) url += `?${params.toString()}`;
@@ -1285,78 +1288,18 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                   <ShieldCheck className="w-3 h-3" /> JWT Authenticated
                 </span>
               </h3>
-              <p className="text-xs text-zinc-400">Manage shoe orders, update shipment statuses, &amp; view live sales</p>
+              <p className="text-xs text-zinc-400">Manage shoe orders &amp; update shipment statuses</p>
             </div>
           </div>
 
           <button
-            onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+            type="button"
+            onClick={() => setShowControlPanelModal(true)}
+            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-zinc-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-md transition-all cursor-pointer shrink-0"
+            title="Open Control Panel for filters, search, reports, and stock controls"
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Navigation Tabs Bar */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800 bg-zinc-950/40">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border ${
-                activeTab === 'orders'
-                  ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Orders &amp; Sales</span>
-              {orders.length > 0 && (
-                <span className="bg-zinc-950 text-amber-300 px-2 py-0.5 rounded-full font-mono text-[10px]">
-                  {orders.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('inquiries')}
-              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border ${
-                activeTab === 'inquiries'
-                  ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <List className="w-4 h-4" />
-              <span>Customer Inquiries</span>
-            </button>
-
-            {/* ADMIN-ONLY: Stock Control Tab */}
-            <button
-              onClick={() => setActiveTab('products')}
-              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border ${
-                activeTab === 'products'
-                  ? 'bg-red-600 text-white border-red-500 shadow-md'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Stock Control</span>
-              {productsList.length > 0 && (
-                <span className="bg-zinc-950 text-red-300 px-2 py-0.5 rounded-full font-mono text-[10px]">
-                  {productsList.filter(p => p.inStock === false).length > 0
-                    ? `${productsList.filter(p => p.inStock === false).length} OOS`
-                    : productsList.length
-                  }
-                </span>
-              )}
-            </button>
-
-          </div>
-
-          <button
-            onClick={() => window.location.reload()}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${(fetchingOrders || fetchingInquiries || fetchingProductsList) ? 'animate-spin text-amber-400' : ''}`} /> Refresh
+            <SlidersHorizontal className="w-4 h-4 text-zinc-950" />
+            <span>Control Panel &amp; Filters</span>
           </button>
         </div>
 
@@ -1380,7 +1323,7 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
             <div className="space-y-6 animate-fadeIn">
               
               {/* Sales Report Section */}
-              {metrics && (
+              {showSalesReport && metrics && (
                 <div className="space-y-3 bg-zinc-950/80 border border-zinc-800 p-4 sm:p-5 rounded-2xl">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1512,82 +1455,14 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                 </div>
               )}
 
-              {/* Search & Status Filter Controls */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-zinc-950/60 p-4 border border-zinc-800 rounded-2xl">
-                
-                {/* Search Bar & Right-Side Search Button */}
-                <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 flex-1">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      value={searchInputVal}
-                      onChange={(e) => setSearchInputVal(e.target.value)}
-                      placeholder="Search customer by Gmail (e.g. customer@gmail.com)..."
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-4 pr-10 py-2 text-xs text-white focus:outline-none focus:border-amber-400 transition-colors"
-                    />
-                    {(searchInputVal || searchQuery) && (
-                      <button
-                        type="button"
-                        onClick={handleClearSearch}
-                        className="absolute right-3 top-2.5 text-zinc-400 hover:text-white p-0.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 transition-all"
-                        title="Clear Search"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs rounded-xl transition-all shadow-md shadow-amber-500/20 flex items-center gap-1.5 shrink-0"
-                    title="Search MongoDB Orders by Gmail"
-                  >
-                    <Search className="w-3.5 h-3.5 text-zinc-950" />
-                    <span>Search</span>
-                  </button>
-                </form>
-
-                {/* Filter Tabs */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
-                  <span className="text-[11px] text-zinc-400 font-bold uppercase mr-1 flex items-center gap-1">
-                    <Filter className="w-3.5 h-3.5 text-amber-400" /> Filter:
+              {/* Minimal Clean Order Filter Banner */}
+              <div className="flex items-center justify-between p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-2xl text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-400 font-bold uppercase text-[10px]">Filter Status:</span>
+                  <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold font-mono">
+                    {statusFilter}
                   </span>
-                  {['All', 'Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map((st) => (
-                    <button
-                      key={st}
-                      onClick={() => setStatusFilter(st)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap ${
-                        statusFilter === st
-                          ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow'
-                          : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-                      }`}
-                    >
-                      {st}
-                    </button>
-                  ))}
                 </div>
-
-                {/* Permanent Records Badge & Admin Delete Control Toggle */}
-                <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800">
-                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1.5 whitespace-nowrap">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Permanent Records Active</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminDeleteControls(!showAdminDeleteControls)}
-                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all flex items-center gap-1 whitespace-nowrap ${
-                      showAdminDeleteControls
-                        ? 'bg-red-500/20 text-red-300 border-red-500/50'
-                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
-                    }`}
-                    title="Toggle Admin Delete Action Controls"
-                  >
-                    <Trash2 className="w-3 h-3 text-red-400" />
-                    <span>{showAdminDeleteControls ? 'Delete Mode: ON' : 'Delete Mode: OFF'}</span>
-                  </button>
-                </div>
-
               </div>
 
               {/* Gmail Customer Search Result Summary Banner */}
@@ -1629,32 +1504,48 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
               )}
 
               {/* Orders List Container */}
-              {fetchingOrders ? (
-                <div className="py-16 text-center text-zinc-400 flex items-center justify-center gap-3">
-                  <RefreshCw className="w-6 h-6 animate-spin text-amber-400" /> Fetching customer orders from MongoDB...
-                </div>
-              ) : orders.length === 0 ? (
-                <div className="py-16 text-center space-y-3">
-                  <div className="text-zinc-400 text-sm font-bold">
-                    {searchQuery.trim().includes('@')
-                      ? 'No orders found for this Gmail.'
-                      : 'No orders found for the selected search query or status filter.'}
+              {(() => {
+                const filtered = orders.filter((o) => {
+                  const st = (o.orderStatus || '').toString().trim();
+                  if (statusFilter === 'New Order' || statusFilter === 'Processing') {
+                    return st !== 'Delivered' && st !== 'Cancelled';
+                  }
+                  if (statusFilter !== 'All') {
+                    return st === statusFilter || (statusFilter === 'Pending' && (st === 'ORDER PENDING' || st === 'Order Placed'));
+                  }
+                  return true;
+                });
+
+                const displayedOrders = statusFilter === 'New Order' ? filtered.slice(0, 1) : filtered;
+
+                return fetchingOrders ? (
+                  <div className="py-16 text-center text-zinc-400 flex items-center justify-center gap-3">
+                    <RefreshCw className="w-6 h-6 animate-spin text-amber-400" /> Fetching customer orders from MongoDB...
                   </div>
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={handleClearSearch}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-xs rounded-xl shadow-md transition-all"
-                    >
-                      <X className="w-4 h-4" /> Clear Search Filter
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* COMPACT CLEAN ORDER CARDS VIEW */}
-                  <div className="space-y-3">
-                    {orders.map((ord) => {
+                ) : displayedOrders.length === 0 ? (
+                  <div className="py-16 text-center space-y-3">
+                    <div className="text-zinc-400 text-sm font-bold">
+                      {searchQuery.trim().includes('@')
+                        ? 'No orders found for this Gmail.'
+                        : statusFilter === 'Processing'
+                        ? 'No orders requiring processing currently.'
+                        : 'No orders found for the selected search query or status filter.'}
+                    </div>
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={handleClearSearch}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-xs rounded-xl shadow-md transition-all"
+                      >
+                        <X className="w-4 h-4" /> Clear Search Filter
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* COMPACT CLEAN ORDER CARDS VIEW */}
+                    <div className="space-y-3">
+                      {displayedOrders.map((ord) => {
                       const { date: orderDate, time: orderTime } = formatOrderDateTime(ord.createdAt);
                       const shoeNames = ord.items?.map((it) => it.name).filter(Boolean).join(', ') || 'LITRA KING Footwear';
 
@@ -1727,7 +1618,8 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                     })}
                   </div>
                 </>
-              )}
+              );
+            })()}
 
             </div>
           )}
@@ -1812,20 +1704,6 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                 >
                   <Truck className="w-3.5 h-3.5 text-zinc-950" />
                   <span>Deliver</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const cur = selectedAdminOrder;
-                    setSelectedAdminOrder(null);
-                    handleOpenWhatsAppModal(cur);
-                  }}
-                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-colors"
-                  title="Open WhatsApp Message Preview"
-                >
-                  <svg className="w-3.5 h-3.5 fill-current text-white" viewBox="0 0 24 24">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l.261.417-1.152 4.208 4.309-1.129.325.171z" />
-                  </svg>
-                  <span>WhatsApp</span>
                 </button>
                 {showAdminDeleteControls && (
                   <button
@@ -3436,6 +3314,425 @@ export default function DataEntryModal({ isOpen, onClose, accessToken }) {
                     </span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reports Statistics Overlay Modal ────────────────────────────────────── */}
+      {showReportsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-fadeIn">
+          <div className="relative w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/80">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-extrabold text-white tracking-wider flex items-center gap-2">
+                    ORDERS &amp; SALES REPORT STATISTICS
+                  </h3>
+                  <p className="text-xs text-zinc-400">Real-time statistics calculated from live database orders</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowReportsModal(false)}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-6">
+              {(() => {
+                const todayObj = new Date();
+                const todayDateStr = todayObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                const currentMonth = todayObj.getMonth();
+                const currentYear = todayObj.getFullYear();
+
+                let todayOrdersCount = 0;
+                let monthOrdersCount = 0;
+                let monthSalesTotal = 0;
+
+                let pendingCount = 0;
+                let confirmedCount = 0;
+                let shippedCount = 0;
+                let deliveredCount = 0;
+                let cancelledCount = 0;
+
+                const dateMap = {};
+
+                orders.forEach((ord) => {
+                  if (!ord.createdAt) return;
+                  const createdAtDate = new Date(ord.createdAt);
+                  const dateFormatted = createdAtDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+                  dateMap[dateFormatted] = (dateMap[dateFormatted] || 0) + 1;
+
+                  if (createdAtDate.toDateString() === todayObj.toDateString()) {
+                    todayOrdersCount++;
+                  }
+
+                  if (createdAtDate.getMonth() === currentMonth && createdAtDate.getFullYear() === currentYear) {
+                    monthOrdersCount++;
+                    monthSalesTotal += Number(ord.totalAmount || 0);
+                  }
+
+                  const st = (ord.orderStatus || '').toString().trim();
+                  if (st === 'Delivered') {
+                    deliveredCount++;
+                  } else if (st === 'Cancelled') {
+                    cancelledCount++;
+                  } else if (st === 'Confirmed') {
+                    confirmedCount++;
+                  } else if (st === 'Shipped' || st === 'Out for Delivery' || st === 'Packed') {
+                    shippedCount++;
+                  } else {
+                    pendingCount++;
+                  }
+                });
+
+                const dateWiseList = Object.keys(dateMap).map((dStr) => ({
+                  dateStr: dStr,
+                  count: dateMap[dStr],
+                })).sort((a, b) => new Date(b.dateStr).getTime() - new Date(a.dateStr).getTime());
+
+                const report = {
+                  todayDateStr,
+                  todayOrdersCount,
+                  monthOrdersCount,
+                  monthSalesTotal: metrics?.monthSales || monthSalesTotal,
+                  pendingCount,
+                  confirmedCount,
+                  shippedCount,
+                  deliveredCount,
+                  cancelledCount,
+                  dateWiseList,
+                };
+
+                return (
+                  <>
+                    {/* Core Cards Overview Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {/* 1. Today's Date & Today's Total Orders */}
+                      <div className="p-4 bg-zinc-950 border border-amber-500/40 rounded-2xl space-y-1.5 shadow-md">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 block">Today's Orders ({report.todayDateStr})</span>
+                        <div className="text-3xl font-mono font-black text-amber-400">
+                          {report.todayOrdersCount} <span className="text-xs font-normal text-zinc-400">orders</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500">Orders created today</p>
+                      </div>
+
+                      {/* 2. This Month's Total Orders */}
+                      <div className="p-4 bg-zinc-950 border border-emerald-500/40 rounded-2xl space-y-1.5 shadow-md">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 block">This Month's Orders</span>
+                        <div className="text-3xl font-mono font-black text-emerald-400">
+                          {report.monthOrdersCount} <span className="text-xs font-normal text-zinc-400">orders</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500">Total orders in current month</p>
+                      </div>
+
+                      {/* 3. This Month's Total Sales */}
+                      <div className="p-4 bg-zinc-950 border border-emerald-500/40 rounded-2xl space-y-1.5 shadow-md">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 block">This Month's Sales</span>
+                        <div className="text-2xl font-mono font-black text-emerald-400">
+                          ₹{(report.monthSalesTotal || 0).toLocaleString('en-IN')}
+                        </div>
+                        <p className="text-[10px] text-zinc-500">Revenue generated this month</p>
+                      </div>
+
+                      {/* 4. Total Orders Count */}
+                      <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-1.5 shadow-md">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 block">Total Database Orders</span>
+                        <div className="text-3xl font-mono font-black text-white">
+                          {orders.length} <span className="text-xs font-normal text-zinc-400">orders</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500">All historical orders in DB</p>
+                      </div>
+                    </div>
+
+                    {/* Status Breakdown Section */}
+                    <div className="p-4 bg-zinc-950/80 border border-zinc-800 rounded-2xl space-y-3">
+                      <h4 className="text-xs font-extrabold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <SlidersHorizontal className="w-4 h-4 text-amber-400" /> Order Status Breakdown
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center">
+                        <div className="p-3 bg-zinc-900 border border-amber-500/30 rounded-xl">
+                          <div className="text-[10px] font-bold text-amber-400 uppercase">Pending</div>
+                          <div className="text-xl font-mono font-black text-white mt-1">{report.pendingCount}</div>
+                        </div>
+                        <div className="p-3 bg-zinc-900 border border-blue-500/30 rounded-xl">
+                          <div className="text-[10px] font-bold text-blue-400 uppercase">Confirmed</div>
+                          <div className="text-xl font-mono font-black text-white mt-1">{report.confirmedCount}</div>
+                        </div>
+                        <div className="p-3 bg-zinc-900 border border-purple-500/30 rounded-xl">
+                          <div className="text-[10px] font-bold text-purple-400 uppercase">Shipped</div>
+                          <div className="text-xl font-mono font-black text-white mt-1">{report.shippedCount}</div>
+                        </div>
+                        <div className="p-3 bg-zinc-900 border border-emerald-500/30 rounded-xl">
+                          <div className="text-[10px] font-bold text-emerald-400 uppercase">Delivered</div>
+                          <div className="text-xl font-mono font-black text-white mt-1">{report.deliveredCount}</div>
+                        </div>
+                        <div className="p-3 bg-zinc-900 border border-red-500/30 rounded-xl">
+                          <div className="text-[10px] font-bold text-red-400 uppercase">Cancelled</div>
+                          <div className="text-xl font-mono font-black text-white mt-1">{report.cancelledCount}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Date-wise Order Count Breakdown Table */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-extrabold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-amber-400" /> Date-Wise Order Counts ({report.dateWiseList.length} dates)
+                      </h4>
+                      <div className="border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-950">
+                        <div className="max-h-60 overflow-y-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead className="bg-zinc-900 text-zinc-400 font-bold uppercase text-[10px] sticky top-0 border-b border-zinc-800">
+                              <tr>
+                                <th className="p-3">Order Date</th>
+                                <th className="p-3">Total Orders Count</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-800/60 text-zinc-300 font-mono">
+                              {report.dateWiseList.length === 0 ? (
+                                <tr>
+                                  <td colSpan={2} className="p-4 text-center text-zinc-500">No orders date history found.</td>
+                                </tr>
+                              ) : (
+                                report.dateWiseList.map((item, idx) => (
+                                  <tr key={idx} className="hover:bg-zinc-900/50 transition-colors">
+                                    <td className="p-3 font-semibold text-white">{item.dateStr}</td>
+                                    <td className="p-3 font-bold text-amber-400">{item.count} orders</td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end px-6 py-3 border-t border-zinc-800 bg-zinc-950/80">
+              <button
+                type="button"
+                onClick={() => setShowReportsModal(false)}
+                className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs rounded-xl transition-all"
+              >
+                Close Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Admin Control Panel & Filters Overlay Modal ───────────────────────── */}
+      {showControlPanelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-fadeIn">
+          <div className="relative w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100 flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/80">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+                  <SlidersHorizontal className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-extrabold text-white tracking-wider flex items-center gap-2">
+                    ADMIN CONTROL PANEL &amp; FILTERS
+                  </h3>
+                  <p className="text-xs text-zinc-400">Search orders, filter by status, view reports &amp; stock controls</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowControlPanelModal(false)}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-6">
+              
+              {/* Navigation Tabs Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-zinc-950/80 border border-zinc-800 rounded-2xl">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      setActiveTab('orders');
+                    }}
+                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border ${
+                      activeTab === 'orders'
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md'
+                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <Package className="w-4 h-4" />
+                    <span>Orders &amp; Sales</span>
+                    {orders.length > 0 && (
+                      <span className="bg-zinc-950 text-amber-300 px-2 py-0.5 rounded-full font-mono text-[10px]">
+                        {orders.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveTab('inquiries');
+                    }}
+                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border ${
+                      activeTab === 'inquiries'
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md'
+                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <List className="w-4 h-4" />
+                    <span>Customer Inquiries</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveTab('products');
+                    }}
+                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border ${
+                      activeTab === 'products'
+                        ? 'bg-red-600 text-white border-red-500 shadow-md'
+                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Stock Control</span>
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${(fetchingOrders || fetchingInquiries || fetchingProductsList) ? 'animate-spin text-amber-400' : ''}`} /> Refresh
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-3">
+                <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">Search Customer Orders:</span>
+                <form onSubmit={(e) => { handleSearchSubmit(e); setShowControlPanelModal(false); }} className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={searchInputVal}
+                      onChange={(e) => setSearchInputVal(e.target.value)}
+                      placeholder="Search customer by Gmail (e.g. customer@gmail.com)..."
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-4 pr-10 py-2 text-xs text-white focus:outline-none focus:border-amber-400 transition-colors"
+                    />
+                    {(searchInputVal || searchQuery) && (
+                      <button
+                        type="button"
+                        onClick={handleClearSearch}
+                        className="absolute right-3 top-2.5 text-zinc-400 hover:text-white p-0.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 transition-all"
+                        title="Clear Search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs rounded-xl transition-all shadow-md shadow-amber-500/20 flex items-center gap-1.5 shrink-0"
+                    title="Search MongoDB Orders by Gmail"
+                  >
+                    <Search className="w-3.5 h-3.5 text-zinc-950" />
+                    <span>Search</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* Filter Tabs Section */}
+              <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-3">
+                <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">Filter Orders by Status:</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {['New Order', 'Processing', 'Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled', 'All'].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => {
+                        setStatusFilter(st);
+                        setShowControlPanelModal(false);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border whitespace-nowrap ${
+                        statusFilter === st
+                          ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow'
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Tools & Features */}
+              <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-3">
+                <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">Admin Tools &amp; Reports:</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowControlPanelModal(false);
+                      setShowReportsModal(true);
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-zinc-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-zinc-950" />
+                    <span>Open Statistics Reports</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSalesReport(!showSalesReport)}
+                    className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <TrendingUp className="w-4 h-4 text-amber-400" />
+                    <span>{showSalesReport ? 'Hide Sales Report Cards' : 'Show Sales Report Cards'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminDeleteControls(!showAdminDeleteControls)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                      showAdminDeleteControls
+                        ? 'bg-red-500/20 text-red-300 border-red-500/50'
+                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                    <span>{showAdminDeleteControls ? 'Delete Mode: ON' : 'Delete Mode: OFF'}</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end px-6 py-3 border-t border-zinc-800 bg-zinc-950/80">
+              <button
+                type="button"
+                onClick={() => setShowControlPanelModal(false)}
+                className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-xs rounded-xl shadow-md transition-all"
+              >
+                Apply &amp; Close Panel
               </button>
             </div>
           </div>
