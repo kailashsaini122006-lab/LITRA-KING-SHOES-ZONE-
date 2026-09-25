@@ -24,12 +24,12 @@ export const Sidebar = ({ mobileOpen, setMobileOpen }) => {
 
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Products', icon: ShoppingBag, path: '/admin/products' },
     { label: 'Orders', icon: ShoppingCart, path: '/admin/orders' },
-    { label: 'Stock', icon: Boxes, path: '/admin/stock' },
-    { label: 'Customers', icon: Users, path: '/admin/customers' },
-    { label: 'Delivery', icon: Truck, path: '/admin/delivery' },
+    { label: 'Products', icon: ShoppingBag, path: '/admin/products' },
+    { label: 'Users', icon: Users, path: '/admin/users' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
+    { label: 'Stock', icon: Boxes, path: '/admin/stock' },
+    { label: 'Delivery', icon: Truck, path: '/admin/delivery' },
   ];
 
   return (

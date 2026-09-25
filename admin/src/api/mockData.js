@@ -73,6 +73,42 @@ export const MOCK_PRODUCTS = [
 
 export const MOCK_ORDERS = [
   {
+    _id: 'ord_lk1051',
+    orderId: 'LK1051',
+    createdAt: new Date().toISOString(),
+    customer: {
+      name: 'Aadhiya Saini',
+      phone: '9257960226',
+      email: 'aadhiya.saini@gmail.com',
+      address: 'Gandipat Road, Agarwal Caterers के सामने',
+      city: 'Jaipur',
+      state: 'Rajasthan',
+      pincode: '302021',
+      latitude: 26.905204684070238,
+      longitude: 75.74607948523447
+    },
+    items: [
+      {
+        productId: 'LK-SP-001',
+        name: 'LITRA KING Air Runner Pro',
+        price: 2499,
+        size: 7,
+        color: 'Black/Gold',
+        quantity: 1,
+        image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80'
+      }
+    ],
+    subtotal: 2499,
+    deliveryCharge: 99,
+    totalAmount: 2598,
+    paymentMethod: 'COD',
+    paymentStatus: 'Pending',
+    orderStatus: 'Out for Delivery',
+    deliveryBoyName: 'Vikram Singh',
+    deliveryBoyPhone: '+91 94140 88776',
+    estimatedDeliveryTime: 'Same Day'
+  },
+  {
     _id: 'ord_9001',
     orderId: 'LK-ORD-8821',
     createdAt: '2026-09-21T10:30:00.000Z',

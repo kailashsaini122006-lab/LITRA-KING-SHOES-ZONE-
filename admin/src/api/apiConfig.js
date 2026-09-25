@@ -9,7 +9,10 @@ const getBaseUrl = () => {
 export const API_BASE_URL = getBaseUrl();
 
 export const getAuthHeaders = () => {
-  const token = localStorage.getItem('litra_admin_token');
+  const token =
+    localStorage.getItem('litra_admin_token') ||
+    sessionStorage.getItem('lk_access_token') ||
+    localStorage.getItem('lk_access_token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

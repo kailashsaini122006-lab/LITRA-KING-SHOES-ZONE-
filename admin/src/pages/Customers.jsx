@@ -54,14 +54,14 @@ export const Customers = () => {
   });
 
   return (
-    <AdminLayout title="Customer Directory">
+    <AdminLayout title="Users & Customer Directory">
       {/* Search Toolbar */}
       <div className="page-toolbar">
         <div className="search-box">
           <Search size={18} color="var(--text-muted)" />
           <input
             type="text"
-            placeholder="Search customers by name, phone or email..."
+            placeholder="Search users by name, phone or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
