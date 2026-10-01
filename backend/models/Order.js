@@ -61,7 +61,7 @@ const orderSchema = new mongoose.Schema(
     deliveryBoyStatus: {
       type: String,
       default: 'DELIVERY BOY PENDING',
-      enum: ['DELIVERY BOY PENDING', 'DELIVERY BOY RECEIVED', 'DELIVERY SENT', 'Pending', 'Received'],
+      enum: ['DELIVERY BOY PENDING', 'DELIVERY BOY RECEIVED', 'DELIVERY SENT', 'Pending', 'Received', 'Accepted', 'Waiting for Delivery Boy to Accept'],
     },
     deliveryBoyId: { type: String, default: '', trim: true },
     deliveryBoyName: { type: String, default: '', trim: true },
@@ -71,6 +71,9 @@ const orderSchema = new mongoose.Schema(
     deliverySendTime: { type: String, default: '', trim: true },
     deliverySentAt: { type: Date, default: null },
     deliverySource: { type: String, default: 'LITRA KING STORE', trim: true },
+    deliveryAssignmentStatus: { type: String, default: 'Not Assigned', trim: true },
+    deliveryBoyAcceptedAt: { type: Date, default: null },
+    deliveryBoyAcceptedAtFormatted: { type: String, default: '', trim: true },
     paymentDate: { type: String, default: '' },
     paymentTime: { type: String, default: '' },
     paidAt: { type: Date, default: null },

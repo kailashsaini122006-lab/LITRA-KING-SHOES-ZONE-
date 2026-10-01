@@ -459,11 +459,17 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
+    if (updateData.inStock !== undefined) {
+      updateData.inStock = Boolean(updateData.inStock);
+    }
+
     if (updateData.stock !== undefined) {
       const numStock = Number(updateData.stock);
       if (!isNaN(numStock) && numStock >= 0) {
         updateData.stock = numStock;
-        updateData.inStock = numStock > 0;
+        if (updateData.inStock === undefined) {
+          updateData.inStock = numStock > 0;
+        }
       } else {
         delete updateData.stock;
       }

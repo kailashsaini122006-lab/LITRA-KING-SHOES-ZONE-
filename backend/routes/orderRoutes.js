@@ -3,12 +3,11 @@ const router = express.Router();
 const orderController = require('../controllers/orderController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-// ── Public Customer & Delivery Boy Endpoints ─────────────────────────────────
+// ── Public Customer Endpoints ────────────────────────────────────────────────
 router.post('/', orderController.createOrder); // COD Order Placement
-router.get('/track/:id', orderController.getOrderById); // Order Tracking
-router.get('/public/:id', orderController.getOrderById);
+router.get('/track/:id', orderController.trackOrderPublic); // Public Masked Order Tracking (Privacy Protected)
+router.get('/public/:id', orderController.trackOrderPublic); // Public Masked Order Tracking (Privacy Protected)
 router.get('/delivery-boy/assigned', orderController.getAssignedOrdersForDeliveryBoy); // Assigned Orders for Delivery Boy
-
 
 // ── Public Razorpay Online Payment Endpoints ────────────────────────────────
 router.get('/razorpay-key', orderController.getRazorpayKey); // Get Public Key ID safely
@@ -21,7 +20,8 @@ router.post('/:id/verify-otp', authMiddleware, orderController.verifyDeliveryOtp
 router.post('/:id/resend-otp', authMiddleware, orderController.resendDeliveryOtp);
 router.post('/:id/delivery-send', authMiddleware, orderController.sendOrderToDeliveryBoy);
 router.put('/:id/delivery-send', authMiddleware, orderController.sendOrderToDeliveryBoy);
-
+router.post('/:id/accept-delivery', orderController.acceptDeliveryOrder);
+router.put('/:id/accept-delivery', orderController.acceptDeliveryOrder);
 
 // ── Protected Admin Endpoints ────────────────────────────────────────────────
 router.get('/admin/metrics', authMiddleware, orderController.getOrderMetrics);
@@ -30,7 +30,7 @@ router.get('/reports/monthly', authMiddleware, orderController.getMonthlySalesRe
 router.get('/reports/orders', authMiddleware, orderController.getOrdersReport);
 router.get('/search', authMiddleware, orderController.searchOrdersByEmail);
 router.get('/', authMiddleware, orderController.getOrders);
-router.get('/:id', orderController.getOrderById); // Dual access for tracking & admin view
+router.get('/:id', authMiddleware, orderController.getOrderById); // Protected full admin order view
 router.put('/:id', authMiddleware, orderController.updateOrderStatus);
 router.delete('/:id', authMiddleware, orderController.deleteOrder);
 

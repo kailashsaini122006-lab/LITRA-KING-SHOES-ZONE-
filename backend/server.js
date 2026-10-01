@@ -1,7 +1,5 @@
 require('dotenv').config();
 
-console.log("MongoDB URI =", process.env.MONGODB_URI);
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -26,7 +24,15 @@ const allowedOrigins = [
 ];
 
 if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(process.env.FRONTEND_URL);
+  let fUrl = process.env.FRONTEND_URL.trim();
+  if (!fUrl.startsWith('http')) fUrl = `https://${fUrl}`;
+  allowedOrigins.push(fUrl);
+}
+
+if (process.env.ADMIN_URL) {
+  let aUrl = process.env.ADMIN_URL.trim();
+  if (!aUrl.startsWith('http')) aUrl = `https://${aUrl}`;
+  allowedOrigins.push(aUrl);
 }
 
 const corsOptions = {
@@ -34,7 +40,7 @@ const corsOptions = {
     // Allow requests with no origin (curl, mobile apps, Postman)
     if (!origin) return callback(null, true);
 
-    // Allow any localhost/127.0.0.1 port and any vercel preview/prod domain
+    // Allow any localhost/127.0.0.1 port and allowed vercel preview/prod domain
     if (
       origin.startsWith('http://localhost:') ||
       origin.startsWith('http://127.0.0.1:') ||
@@ -44,10 +50,13 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // Default allow to prevent blocking client requests
+    if (process.env.NODE_ENV === 'production') {
+      return callback(new Error('CORS policy: Access denied for origin ' + origin));
+    }
+
     return callback(null, true);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   credentials: true,
   optionsSuccessStatus: 200,
@@ -55,6 +64,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
 
 const path = require('path');
 const fs = require('fs');
@@ -65,6 +75,11 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 app.use('/uploads', express.static(uploadsDir));
+
+const assetsDir = path.join(__dirname, 'public/assets');
+if (fs.existsSync(assetsDir)) {
+  app.use('/assets', express.static(assetsDir));
+}
 
 // ─── Body Parser ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
@@ -80,6 +95,19 @@ app.get('/', (req, res) => {
 });
 
 const authController = require('./controllers/authController');
+const ensureDbConnected = require('./utils/dbConnect');
+
+// ─── Ensure Database Connected for API Routes ─────────────────────────────────
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api/') && req.path !== '/') {
+    try {
+      await ensureDbConnected();
+    } catch (err) {
+      console.warn('⚠️  MongoDB connection warning on middleware:', err.message);
+    }
+  }
+  next();
+});
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/inquiries', inquiryRoutes);

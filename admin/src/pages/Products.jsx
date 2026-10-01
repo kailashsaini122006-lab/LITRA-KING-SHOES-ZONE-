@@ -114,7 +114,7 @@ export const Products = () => {
       price: Number(form.price),
       originalPrice: form.originalPrice ? Number(form.originalPrice) : Math.round(Number(form.price) * 1.3),
       stock: Number(form.stock),
-      inStock: Number(form.stock) > 0 && form.inStock
+      inStock: Boolean(form.inStock)
     };
 
     if (editingProduct) {
@@ -209,9 +209,13 @@ export const Products = () => {
                 <tr key={prod._id || prod.productId}>
                   <td>
                     <img
-                      src={prod.images?.[0] || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=150&q=80'}
+                      src={prod.images?.[0] || prod.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=150&q=80'}
                       alt={prod.name}
                       style={{ width: '45px', height: '45px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=150&q=80';
+                      }}
                     />
                   </td>
                   <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{prod.productId || 'N/A'}</td>

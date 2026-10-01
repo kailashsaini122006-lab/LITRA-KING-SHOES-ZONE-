@@ -63,7 +63,7 @@ export function CartProvider({ children }) {
   /**
    * Detect Customer GPS Location and update delivery distance & charge
    */
-  const detectLocation = () => {
+  const detectLocation = async () => {
     if (locationLoading) return;
 
     setLocationError('');
@@ -74,18 +74,32 @@ export function CartProvider({ children }) {
       return;
     }
 
+    // Check permission status first to avoid browser console error when permission is denied/blocked
+    if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+        if (permissionStatus && permissionStatus.state === 'denied') {
+          setLocationError('Location permission is blocked in your browser settings. Please enter your Pincode manually to get instant delivery distance & charge.');
+          setLocationLoading(false);
+          return;
+        }
+      } catch {
+        // Fallback to getCurrentPosition if permissions API is restricted
+      }
+    }
+
     setLocationLoading(true);
 
     const options = {
-      enableHighAccuracy: true, // High accuracy hardware GPS positioning
-      timeout: 20000,
+      enableHighAccuracy: true,
+      timeout: 10000,
       maximumAge: 0,
     };
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
         if (!position || !position.coords) {
-          setLocationError('Unable to determine your current location. Please check your network or enter Pincode manually.');
+          setLocationError('Unable to determine your current location. Please enter your Pincode manually.');
           setLocationSuccess('');
           setLocationLoading(false);
           return;
@@ -105,13 +119,13 @@ export function CartProvider({ children }) {
         setLocationSuccess('');
         const code = err ? err.code : 0;
         if (code === 1 || (err && err.PERMISSION_DENIED && code === err.PERMISSION_DENIED)) {
-          setLocationError('Location permission was denied or location service is disabled. Please allow location access for this site and try again, or enter your Pincode manually.');
+          setLocationError('Location permission was denied in your browser. Please enter your Pincode manually.');
         } else if (code === 2 || (err && err.POSITION_UNAVAILABLE && code === err.POSITION_UNAVAILABLE)) {
-          setLocationError('Unable to determine your current location. Please check your network or enter Pincode manually.');
+          setLocationError('Unable to determine your current location. Please enter your Pincode manually.');
         } else if (code === 3 || (err && err.TIMEOUT && code === err.TIMEOUT)) {
-          setLocationError('Location request timed out. Please try again or enter Pincode manually.');
+          setLocationError('Location request timed out. Please enter your Pincode manually.');
         } else {
-          setLocationError('Unable to determine your current location. Please check your network or enter Pincode manually.');
+          setLocationError('Unable to determine your current location. Please enter your Pincode manually.');
         }
         setLocationLoading(false);
       },
@@ -144,6 +158,7 @@ export function CartProvider({ children }) {
     if (result.success && result.distanceKm !== null && result.deliveryCharge !== null) {
       setDeliveryDistance(result.distanceKm);
       setDeliveryCharge(result.deliveryCharge);
+      setLocationError('');
       setLocationLoading(false);
       return result;
     } else {

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import { Dashboard } from './pages/Dashboard';
@@ -24,46 +25,44 @@ export default function App() {
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [isDataEntryOpen, setIsDataEntryOpen] = useState(false);
   const [accessToken, setAccessToken] = useState(() => {
-    return sessionStorage.getItem('lk_access_token') || localStorage.getItem('lk_access_token') || '';
+    return sessionStorage.getItem('lk_access_token') || localStorage.getItem('lk_access_token') || localStorage.getItem('litra_admin_token') || '';
   });
 
   const handleAuthSuccess = (token) => {
     setAccessToken(token);
     sessionStorage.setItem('lk_access_token', token);
+    localStorage.setItem('litra_admin_token', token);
     setIsSecurityOpen(false);
   };
 
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <div className="min-h-screen bg-[#0b0f19] text-zinc-100 font-sans">
           <Routes>
-            {/* Requirement 1: Dashboard is DEFAULT when opening /admin */}
-            <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="/admin/dashboard" element={<Dashboard />} />
-
-            {/* Requirement 3 & 5: Navigation routes */}
-            <Route path="/admin/orders" element={<Orders />} />
-            <Route path="/admin/products" element={<Products />} />
-            <Route path="/admin/users" element={<Customers />} />
-            <Route path="/admin/customers" element={<Customers />} />
-            <Route path="/admin/settings" element={<Settings />} />
-
-            {/* Inventory, Delivery & Detailed Reports */}
-            <Route path="/admin/stock" element={<Stock />} />
-            <Route path="/admin/delivery" element={<Delivery />} />
-            <Route path="/admin/reports/daily" element={<DailySalesReportPage accessToken={accessToken} />} />
-            <Route path="/admin/reports/monthly" element={<MonthlySalesReportPage accessToken={accessToken} />} />
-            <Route path="/admin/reports/orders" element={<OrdersReportPage accessToken={accessToken} />} />
-            <Route path="/product-management" element={<ProductManagement />} />
             <Route path="/admin/login" element={<Login />} />
+
+            {/* All Protected Admin Routes */}
+            <Route path="/" element={<ProtectedRoute><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
+            <Route path="/admin/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/admin/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+            <Route path="/admin/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
+            <Route path="/admin/users" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
+            <Route path="/admin/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
+            <Route path="/admin/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/admin/stock" element={<ProtectedRoute><Stock /></ProtectedRoute>} />
+            <Route path="/admin/delivery" element={<ProtectedRoute><Delivery /></ProtectedRoute>} />
+            <Route path="/admin/reports/daily" element={<ProtectedRoute><DailySalesReportPage accessToken={accessToken} /></ProtectedRoute>} />
+            <Route path="/admin/reports/monthly" element={<ProtectedRoute><MonthlySalesReportPage accessToken={accessToken} /></ProtectedRoute>} />
+            <Route path="/admin/reports/orders" element={<ProtectedRoute><OrdersReportPage accessToken={accessToken} /></ProtectedRoute>} />
+            <Route path="/product-management" element={<ProtectedRoute><ProductManagement /></ProtectedRoute>} />
 
             {/* Fallback route */}
             <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
           </Routes>
 
-          {/* Optional Security Modal if explicitly triggered */}
+          {/* Optional Security Modal */}
           {isSecurityOpen && (
             <SecurityModal
               isOpen={isSecurityOpen}
@@ -72,7 +71,7 @@ export default function App() {
             />
           )}
 
-          {/* Optional Legacy Data Entry Modal if explicitly triggered */}
+          {/* Optional Legacy Data Entry Modal */}
           {isDataEntryOpen && (
             <DataEntryModal
               isOpen={isDataEntryOpen}

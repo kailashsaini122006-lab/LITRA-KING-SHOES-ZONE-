@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { createInquiry, getInquiries } = require('../controllers/inquiryController');
+const authMiddleware = require('../middleware/authMiddleware');
 
-// /api/inquiries
+// Public Customer Inquiry Submission
 router.post('/', createInquiry);
-router.get('/', getInquiries);
+
+// Admin Only: View all customer inquiries
+router.get('/', authMiddleware, getInquiries);
 
 module.exports = router;

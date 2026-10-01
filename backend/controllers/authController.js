@@ -4,7 +4,7 @@ const AdminUser = require('../models/AdminUser');
 const SecurityAttempt = require('../models/SecurityAttempt');
 const { sendSecurityAlertEmail, sendPasswordResetEmail, sendPinResetEmail, DEFAULT_RECIPIENT } = require('../utils/emailService');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'litra_king_shoes_zone_super_secure_jwt_secret_2026';
+const getJwtSecret = () => process.env.JWT_SECRET || 'litra_king_shoes_zone_super_secure_jwt_secret_2026';
 
 /**
  * Helper to get primary admin user or auto-seed if empty
@@ -116,14 +116,20 @@ exports.verifyPin = async (req, res) => {
     // Authentication Successful! Issue JWT Token
     const accessToken = jwt.sign(
       { id: admin ? admin._id : 'admin', email: admin ? admin.email : DEFAULT_RECIPIENT, scope: 'data-entry-authorized', role: 'admin' },
-      JWT_SECRET,
-      { expiresIn: '2h' }
+      getJwtSecret(),
+      { expiresIn: '12h' }
     );
 
     return res.json({
       success: true,
       message: 'Admin login verified successfully',
+      token: accessToken,
       accessToken,
+      admin: {
+        name: admin ? (admin.adminId || 'Store Owner') : 'Store Owner',
+        email: admin ? admin.email : DEFAULT_RECIPIENT,
+        role: 'admin',
+      },
     });
   } catch (err) {
     console.error('Verify PIN error:', err.message);
@@ -274,14 +280,20 @@ exports.login = async (req, res) => {
         scope: 'data-entry-authorized',
         role: 'admin',
       },
-      JWT_SECRET,
-      { expiresIn: '2h' }
+      getJwtSecret(),
+      { expiresIn: '12h' }
     );
 
     return res.json({
       success: true,
       message: 'Admin login verified successfully',
+      token: accessToken,
       accessToken,
+      admin: {
+        name: admin.adminId || 'Store Owner',
+        email: admin.email,
+        role: 'admin',
+      },
     });
   } catch (err) {
     console.error('Login processing error:', err.message);
@@ -507,8 +519,8 @@ exports.verifyToken = async (req, res) => {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.scope === 'data-entry-authorized') {
+    const decoded = jwt.verify(token, getJwtSecret());
+    if (decoded.role === 'admin' || decoded.scope === 'data-entry-authorized') {
       return res.json({ valid: true, user: decoded });
     }
   } catch { }

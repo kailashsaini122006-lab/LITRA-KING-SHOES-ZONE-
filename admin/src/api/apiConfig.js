@@ -1,8 +1,14 @@
 // API Configuration for LITRA KING Admin Panel
 
-const getBaseUrl = () => {
+export const getBaseUrl = () => {
   const savedUrl = localStorage.getItem('litra_admin_api_url');
-  if (savedUrl) return savedUrl;
+  if (savedUrl) return savedUrl.replace(/\/+$/, '');
+  
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+  }
+  
   return 'http://localhost:5000';
 };
 

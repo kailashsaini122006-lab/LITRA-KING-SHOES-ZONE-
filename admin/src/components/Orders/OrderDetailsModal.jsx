@@ -20,9 +20,10 @@ import {
   Store,
   Map,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
-import { updateOrderStatus, updateDeliveryAssignment } from '../../api/orderApi';
+import { updateOrderStatus, updateDeliveryAssignment, sendOrderToDeliveryBoy, acceptDeliveryOrder, updateDeliveryBoyInfo } from '../../api/orderApi';
 import { SHOP_LOCATION, calculateHaversineDistance } from '../../utils/deliveryUtils';
 
 export const OrderDetailsModal = ({ isOpen, onClose, order, onRefresh }) => {
@@ -35,11 +36,27 @@ export const OrderDetailsModal = ({ isOpen, onClose, order, onRefresh }) => {
   const [msg, setMsg] = useState('');
   const [copiedGps, setCopiedGps] = useState(false);
 
+  // Delivery Boy Acceptance Inline Form state
+  const [showAcceptForm, setShowAcceptForm] = useState(false);
+  const [acceptNameInput, setAcceptNameInput] = useState(order.deliveryBoyName || '');
+  const [acceptPhoneInput, setAcceptPhoneInput] = useState(order.deliveryBoyPhone || '');
+
+  // Update Delivery Boy Info Inline Form state
+  const [showUpdateDeliveryForm, setShowUpdateDeliveryForm] = useState(false);
+  const [editDeliveryName, setEditDeliveryName] = useState(order.deliveryBoyName || '');
+  const [editDeliveryPhone, setEditDeliveryPhone] = useState(order.deliveryBoyPhone || '');
+
   useEffect(() => {
     if (order) {
       setStatus(order.orderStatus || 'Order Placed');
       setDeliveryBoy(order.deliveryBoyName || '');
       setDeliveryPhone(order.deliveryBoyPhone || '');
+      setAcceptNameInput(order.deliveryBoyName || '');
+      setAcceptPhoneInput(order.deliveryBoyPhone || '');
+      setEditDeliveryName(order.deliveryBoyName || '');
+      setEditDeliveryPhone(order.deliveryBoyPhone || '');
+      setShowAcceptForm(false);
+      setShowUpdateDeliveryForm(false);
       setMsg('');
       setCopiedGps(false);
     }
@@ -83,6 +100,74 @@ export const OrderDetailsModal = ({ isOpen, onClose, order, onRefresh }) => {
     }
   };
 
+  const handleSendToDeliveryBoy = async () => {
+    setIsSubmitting(true);
+    setMsg('');
+    try {
+      const res = await sendOrderToDeliveryBoy(order._id || order.orderId);
+      if (res && res.success !== false) {
+        setMsg(`Order #${order.orderId || order._id} sent to Delivery Boy workflow successfully!`);
+        if (onRefresh) onRefresh();
+      } else {
+        setMsg(res.message || 'Failed to send to Delivery Boy');
+      }
+    } catch (err) {
+      setMsg('Error sending order to Delivery Boy: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAcceptDelivery = async (e) => {
+    e.preventDefault();
+    if (!acceptNameInput.trim() || !acceptPhoneInput.trim()) {
+      setMsg('Please enter both Delivery Boy Name and Phone Number');
+      return;
+    }
+    setIsSubmitting(true);
+    setMsg('');
+    try {
+      const res = await acceptDeliveryOrder(order._id || order.orderId, {
+        deliveryBoyName: acceptNameInput.trim(),
+        deliveryBoyPhone: acceptPhoneInput.trim(),
+      });
+      if (res && res.success !== false) {
+        setMsg(`Order #${order.orderId || order._id} successfully accepted by ${acceptNameInput.trim()}!`);
+        setShowAcceptForm(false);
+        if (onRefresh) onRefresh();
+      } else {
+        setMsg(res.message || 'Failed to accept order');
+      }
+    } catch (err) {
+      setMsg('Error accepting order: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveDeliveryBoyInfo = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setMsg('');
+    try {
+      const res = await updateDeliveryBoyInfo(order._id || order.orderId, {
+        deliveryBoyName: editDeliveryName.trim(),
+        deliveryBoyPhone: editDeliveryPhone.trim(),
+      });
+      if (res && res.success !== false) {
+        setMsg(`Delivery Boy information updated for order #${order.orderId || order._id}!`);
+        setShowUpdateDeliveryForm(false);
+        if (onRefresh) onRefresh();
+      } else {
+        setMsg(res.message || 'Failed to update Delivery Boy information');
+      }
+    } catch (err) {
+      setMsg('Error updating Delivery Boy info: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleAssignDelivery = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -101,6 +186,17 @@ export const OrderDetailsModal = ({ isOpen, onClose, order, onRefresh }) => {
       setIsSubmitting(false);
     }
   };
+
+  const isAccepted = Boolean(
+    order.deliveryAssignmentStatus === 'Accepted' ||
+    (order.deliveryBoyName && order.deliveryBoyName.trim().length > 0)
+  );
+
+  const isWaitingAcceptance = !isAccepted && Boolean(
+    order.deliveryAssignmentStatus === 'Waiting for Delivery Boy to Accept' ||
+    order.deliverySendStatus === 'DELIVERY SENT' ||
+    order.deliveryBoyStatus === 'DELIVERY BOY PENDING'
+  );
 
   // Determine Customer GPS & Location Data
   const isAadhiyaOrder = order.orderId === 'LK1051' || order.customer?.name === 'Aadhiya Saini';
@@ -386,7 +482,7 @@ export const OrderDetailsModal = ({ isOpen, onClose, order, onRefresh }) => {
             rel="noopener noreferrer"
             className="btn btn-primary btn-sm"
           >
-            <Navigation size={14} /> Navigate to Pickup
+            <Navigation size={14} /> Navigate to Shop / Pickup
           </a>
         </div>
       </div>
@@ -574,54 +670,188 @@ export const OrderDetailsModal = ({ isOpen, onClose, order, onRefresh }) => {
           <span style={{ color: '#10b981', fontWeight: 700 }}>{order.customer?.name || (isAadhiyaOrder ? 'Aadhiya Saini' : 'Customer')}</span>
         </div>
 
-        {(order.deliveryBoyStatus || order.deliverySendStatus || order.deliverySendDate || order.expectedDeliveryDate) && (
-          <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--bg-card)', borderRadius: '8px', border: '1px dashed var(--border-color)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.82rem' }}>
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>Delivery Status: </span>
-              <strong style={{ color: 'var(--text-main)' }}>{order.deliveryBoyStatus || order.deliverySendStatus || 'Pending'}</strong>
-            </div>
-            {order.deliverySendDate && (
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>Dispatched Date: </span>
-                <strong style={{ color: 'var(--text-main)' }}>{order.deliverySendDate} {order.deliverySendTime || ''}</strong>
-              </div>
+        {/* Status Summary Box */}
+        <div style={{ marginBottom: '1rem', padding: '0.9rem', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.88rem' }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Assignment Status:</span>
+            {isAccepted ? (
+              <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid #10b981', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 800, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                <Check size={14} /> Accepted
+              </span>
+            ) : isWaitingAcceptance ? (
+              <span style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid #f59e0b', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 800, fontSize: '0.82rem' }}>
+                Waiting for Delivery Boy to Accept
+              </span>
+            ) : (
+              <span style={{ background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.82rem' }}>
+                Not Sent to Delivery Workflow
+              </span>
             )}
-            {order.expectedDeliveryDate && (
+          </div>
+
+          {isAccepted ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', paddingTop: '0.65rem', borderTop: '1px dashed var(--border-color)' }}>
               <div>
-                <span style={{ color: 'var(--text-muted)' }}>Expected Delivery: </span>
-                <strong style={{ color: 'var(--text-main)' }}>{order.expectedDeliveryDate}</strong>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Delivery Person Name:</div>
+                <div style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.98rem' }}>
+                  {order.deliveryBoyName}
+                </div>
               </div>
+
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Delivery Person Phone:</div>
+                <div style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                  <a href={`tel:${order.deliveryBoyPhone}`} style={{ color: 'var(--primary)' }}>
+                    {order.deliveryBoyPhone}
+                  </a>
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Accepted At:</div>
+                <div style={{ fontWeight: 700, color: '#10b981', fontSize: '0.85rem' }}>
+                  {order.deliveryBoyAcceptedAtFormatted || (order.deliveryBoyAcceptedAt ? formatDateTime(order.deliveryBoyAcceptedAt) : 'Accepted')}
+                </div>
+              </div>
+            </div>
+          ) : isWaitingAcceptance ? (
+            <div style={{ fontSize: '0.82rem', color: '#f59e0b', fontWeight: 600, paddingTop: '0.4rem', borderTop: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span>Waiting for Delivery Boy to Accept</span>
+              {order.deliverySendDate && (
+                <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 'auto' }}>
+                  Dispatched: {order.deliverySendDate} {order.deliverySendTime || ''}
+                </span>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* ADMIN ACTION: Send to Delivery Boy Button */}
+        {!isAccepted && (
+          <div style={{ marginBottom: '0.85rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleSendToDeliveryBoy}
+              disabled={isSubmitting}
+              style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Truck size={16} /> Send Order to Delivery Boy
+            </button>
+          </div>
+        )}
+
+        {/* DELIVERY BOY ACTION: Accept Order Button & Form */}
+        {!isAccepted && (
+          <div style={{ background: 'var(--bg-card-hover)', padding: '0.85rem', borderRadius: '8px', border: '1px dashed var(--border-color)', marginTop: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <UserCheck size={16} color="#10b981" /> Delivery Boy Side Action:
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowAcceptForm(!showAcceptForm)}
+                style={{ fontWeight: 700, borderColor: '#10b981', color: '#10b981' }}
+              >
+                {showAcceptForm ? 'Cancel Acceptance' : 'Accept Order'}
+              </button>
+            </div>
+
+            {showAcceptForm && (
+              <form onSubmit={handleAcceptDelivery} style={{ marginTop: '0.85rem' }}>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Enter Delivery Boy details to accept order <strong style={{ color: 'var(--primary)' }}>{order.orderId || order._id}</strong>:
+                </p>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '0.78rem' }}>Delivery Boy Name *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. Rahul Kumar"
+                      value={acceptNameInput}
+                      onChange={(e) => setAcceptNameInput(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '0.78rem' }}>Delivery Boy Phone Number *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. 98XXXXXXXX"
+                      value={acceptPhoneInput}
+                      onChange={(e) => setAcceptPhoneInput(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={isSubmitting}
+                  style={{ background: '#10b981', borderColor: '#10b981', color: '#fff', fontWeight: 800 }}
+                >
+                  <Check size={14} /> Accept Order
+                </button>
+              </form>
             )}
           </div>
         )}
 
-        <form onSubmit={handleAssignDelivery}>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Delivery Person Name</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="e.g. Vikram Singh"
-                value={deliveryBoy}
-                onChange={(e) => setDeliveryBoy(e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Delivery Person Phone</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="e.g. +91 94140 88776"
-                value={deliveryPhone}
-                onChange={(e) => setDeliveryPhone(e.target.value)}
-              />
-            </div>
-          </div>
-          <button type="submit" className="btn btn-secondary btn-sm" disabled={isSubmitting}>
-            Save Delivery Person
+        {/* Update Delivery Boy Info Option for Admin */}
+        <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px dashed var(--border-color)' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowUpdateDeliveryForm(!showUpdateDeliveryForm)}
+            style={{ fontSize: '0.82rem', fontWeight: 600 }}
+          >
+            {showUpdateDeliveryForm ? 'Hide Update Form' : 'Update Delivery Boy Info'}
           </button>
-        </form>
+
+          {showUpdateDeliveryForm && (
+            <form onSubmit={handleSaveDeliveryBoyInfo} style={{ marginTop: '0.75rem', background: 'var(--bg-card)', padding: '0.9rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                Update Delivery Boy information for order <strong style={{ color: 'var(--primary)' }}>{order.orderId || order._id}</strong>:
+              </p>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Delivery Boy Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Rahul Kumar"
+                    value={editDeliveryName}
+                    onChange={(e) => setEditDeliveryName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Delivery Boy Mobile Number</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. 98XXXXXXXX"
+                    value={editDeliveryPhone}
+                    onChange={(e) => setEditDeliveryPhone(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={isSubmitting} style={{ fontWeight: 700 }}>
+                  Save Delivery Boy Info
+                </button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowUpdateDeliveryForm(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </Modal>
   );

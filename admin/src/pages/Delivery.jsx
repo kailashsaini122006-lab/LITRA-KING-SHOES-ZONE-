@@ -3,7 +3,7 @@ import { AdminLayout } from '../components/Layout/AdminLayout';
 import { Badge } from '../components/UI/Badge';
 import { OrderDetailsModal } from '../components/Orders/OrderDetailsModal';
 import { Search, Truck, Phone, MapPin, Calendar, Clock, UserCheck, Eye, Edit3 } from 'lucide-react';
-import { fetchOrders, updateDeliveryAssignment } from '../api/orderApi';
+import { fetchOrders, updateDeliveryAssignment, acceptDeliveryOrder, sendOrderToDeliveryBoy } from '../api/orderApi';
 
 export const Delivery = () => {
   const [orders, setOrders] = useState([]);
@@ -39,10 +39,9 @@ export const Delivery = () => {
   const handleSaveDeliveryPerson = async (e) => {
     e.preventDefault();
     if (!editingDelivery) return;
-    await updateDeliveryAssignment(editingDelivery._id || editingDelivery.orderId, {
+    await acceptDeliveryOrder(editingDelivery._id || editingDelivery.orderId, {
       deliveryBoyName: driverName,
       deliveryBoyPhone: driverPhone,
-      orderStatus: editingDelivery.orderStatus === 'Order Placed' || editingDelivery.orderStatus === 'Confirmed' ? 'Out for Delivery' : editingDelivery.orderStatus
     });
     setEditingDelivery(null);
     loadDeliveries();
@@ -139,9 +138,13 @@ export const Delivery = () => {
                           </div>
                         )}
                       </div>
+                    ) : (ord.deliveryAssignmentStatus === 'Waiting for Delivery Boy to Accept' || ord.deliverySendStatus === 'DELIVERY SENT') ? (
+                      <span style={{ fontSize: '0.78rem', color: '#f59e0b', fontWeight: 700, background: 'rgba(245, 158, 11, 0.12)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                        Waiting for Delivery Boy to Accept
+                      </span>
                     ) : (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--status-pending)', fontStyle: 'italic' }}>
-                        Not Assigned
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        Not Sent
                       </span>
                     )}
                   </td>
@@ -154,16 +157,10 @@ export const Delivery = () => {
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
                       <button
                         className="btn btn-secondary btn-sm"
-                        onClick={() => handleOpenAssignModal(ord)}
-                        title="Assign / Update Delivery Boy"
-                      >
-                        <Edit3 size={14} /> Assign Driver
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
                         onClick={() => setSelectedOrder(ord)}
+                        title="View Order Details & Delivery Status"
                       >
-                        <Eye size={14} />
+                        <Eye size={14} /> Details
                       </button>
                     </div>
                   </td>

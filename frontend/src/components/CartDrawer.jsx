@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, X, Trash2, Plus, Minus, ArrowRight, ShieldCheck, Truck, MapPin } from 'lucide-react';
+import { ShoppingBag, X, Trash2, Plus, Minus, ArrowRight, ShieldCheck, Truck, MapPin, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
@@ -17,6 +17,10 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
   } = useCart();
 
   if (!isOpen) return null;
+
+  const hasOutOfStockItem = cartItems.some(
+    (item) => item.inStock === false || (item.stock !== undefined && item.stock <= 0)
+  );
 
   const subtotal = getCartSubtotal();
   const grandTotal = subtotal + (deliveryCharge !== null ? deliveryCharge : 0);
@@ -104,13 +108,18 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
                       <h4 className="text-xs font-bold text-white leading-snug line-clamp-1">{item.name}</h4>
                       
                       {/* Specs pills */}
-                      <div className="flex items-center gap-2 text-[11px]">
+                      <div className="flex items-center gap-2 text-[11px] flex-wrap">
                         <span className="bg-zinc-900 border border-zinc-800 text-amber-400 px-2 py-0.5 rounded font-mono font-bold">
                           UK Size: {item.size}
                         </span>
                         <span className="bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-0.5 rounded font-semibold">
                           {item.color}
                         </span>
+                        {(item.inStock === false || (item.stock !== undefined && item.stock <= 0)) && (
+                          <span className="bg-red-950 text-red-400 border border-red-800 px-2 py-0.5 rounded font-bold flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 text-red-400" /> Out of Stock
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between pt-1">
@@ -202,14 +211,27 @@ export default function CartDrawer({ isOpen, onClose, onProceedToCheckout }) {
                 </div>
               </div>
 
+              {hasOutOfStockItem && (
+                <div className="p-3 bg-red-950/90 border border-red-800 text-red-300 text-xs font-bold rounded-xl text-center flex items-center justify-center gap-1.5 shadow-inner">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>Some items in your cart are Out of Stock. Please remove them to proceed.</span>
+                </div>
+              )}
+
               {/* Checkout Action Button */}
               <button
                 onClick={() => {
+                  if (hasOutOfStockItem) return;
                   startCartCheckout();
                   onClose();
                   if (onProceedToCheckout) onProceedToCheckout();
                 }}
-                className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black rounded-2xl text-sm shadow-xl shadow-amber-500/25 transition-all hover:scale-[1.01] flex items-center justify-center gap-2 uppercase tracking-wider"
+                disabled={hasOutOfStockItem}
+                className={`w-full py-4 font-black rounded-2xl text-sm shadow-xl transition-all flex items-center justify-center gap-2 uppercase tracking-wider ${
+                  hasOutOfStockItem
+                    ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed opacity-60'
+                    : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/25 hover:scale-[1.01]'
+                }`}
               >
                 <span>PROCEED TO CHECKOUT</span>
                 <ArrowRight className="w-4 h-4" />

@@ -1,8 +1,16 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'litra_king_shoes_zone_super_secure_jwt_secret_2026';
-
 function authMiddleware(req, res, next) {
+  const JWT_SECRET = process.env.JWT_SECRET;
+
+  if (!JWT_SECRET) {
+    console.error('❌  JWT_SECRET environment variable is missing on server.');
+    return res.status(500).json({
+      success: false,
+      message: 'Server configuration error: JWT_SECRET is not configured.',
+    });
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -17,10 +25,10 @@ function authMiddleware(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    if (decoded.scope !== 'data-entry-authorized') {
+    if (decoded.role !== 'admin' && decoded.scope !== 'data-entry-authorized') {
       return res.status(403).json({
         success: false,
-        message: 'Access forbidden. Insufficient permissions for data entry.',
+        message: 'Access forbidden. Insufficient permissions.',
       });
     }
 
@@ -29,7 +37,7 @@ function authMiddleware(req, res, next) {
   } catch (err) {
     return res.status(401).json({
       success: false,
-      message: 'Authentication session expired or invalid. Please re-authenticate with Password.',
+      message: 'Authentication session expired or invalid. Please re-authenticate.',
     });
   }
 }

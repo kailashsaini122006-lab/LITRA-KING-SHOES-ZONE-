@@ -3,6 +3,7 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const { DEFAULT_PRODUCTS } = require('./productController');
 const smsService = require('../utils/smsService');
+const ensureDbConnected = require('../utils/dbConnect');
 
 /**
  * Generate 6-digit random Delivery OTP, hash it, set 10-min expiry, and send SMS
@@ -32,6 +33,7 @@ async function generateAndSaveDeliveryOtp(order) {
  * Generate sequential Order ID (e.g. LK1001, LK1002, LK1003)
  */
 async function generateOrderId() {
+  await ensureDbConnected();
   const count = await Order.countDocuments();
   const nextNumber = 1001 + count;
   let candidateId = `LK${nextNumber}`;
@@ -52,6 +54,7 @@ async function generateOrderId() {
  */
 async function findProductByItem(item) {
   if (!item) return null;
+  await ensureDbConnected();
   let dbProduct;
 
   // 1. Try by MongoDB _id (if 24-character hex string)
@@ -325,13 +328,54 @@ exports.verifyRazorpayPayment = async (req, res) => {
         quantity: Number(item.quantity),
         image: item.image || (dbProduct.images && dbProduct.images[0]) || '',
       });
+    }
 
-      if (dbProduct._id && dbProduct._id.toString().match(/^[0-9a-fA-F]{24}$/)) {
-        stockUpdates.push({
-          productId: dbProduct._id,
-          newStock: Math.max(0, dbProduct.stock - Number(item.quantity)),
+    // ── Atomic Concurrency-Safe Stock Reservation ──
+    const deductedItems = [];
+    let stockErrorMsg = null;
+
+    for (const item of validatedItems) {
+      const reqQty = Number(item.quantity) || 1;
+      const pId = item.productId;
+
+      const query = { stock: { $gte: reqQty } };
+      if (pId && pId.toString().match(/^[0-9a-fA-F]{24}$/)) {
+        query._id = pId;
+      } else if (pId) {
+        query.productId = pId;
+      } else {
+        query.name = item.name;
+      }
+
+      const updatedProduct = await Product.findOneAndUpdate(
+        query,
+        { $inc: { stock: -reqQty } },
+        { new: true }
+      );
+
+      if (!updatedProduct) {
+        stockErrorMsg = `Insufficient stock for "${item.name}". The item may have been sold out concurrently.`;
+        break;
+      }
+
+      if (updatedProduct.stock <= 0) {
+        await Product.updateOne({ _id: updatedProduct._id }, { $set: { inStock: false } });
+      }
+
+      deductedItems.push({ productId: updatedProduct._id, quantity: reqQty });
+    }
+
+    if (stockErrorMsg) {
+      for (const dItem of deductedItems) {
+        await Product.findByIdAndUpdate(dItem.productId, {
+          $inc: { stock: dItem.quantity },
+          $set: { inStock: true },
         });
       }
+      return res.status(400).json({
+        success: false,
+        message: stockErrorMsg,
+      });
     }
 
     const reqDeliveryCharge = req.body.deliveryCharge;
@@ -386,13 +430,6 @@ exports.verifyRazorpayPayment = async (req, res) => {
       razorpayOrderId: razorpay_order_id,
     });
 
-    // Decrement product stock in MongoDB
-    for (const update of stockUpdates) {
-      await Product.findByIdAndUpdate(update.productId, {
-        $set: { stock: update.newStock },
-      });
-    }
-
     console.log(`✅ [Razorpay Verified & Paid] Order #${orderId} saved in MongoDB | Txn ID: ${razorpay_payment_id} | Total: ₹${grandTotal}`);
 
     return res.status(201).json({
@@ -416,6 +453,7 @@ exports.verifyRazorpayPayment = async (req, res) => {
  */
 exports.createOrder = async (req, res) => {
   try {
+    await ensureDbConnected();
     const { customer, items, paymentMethod, deliveryCharge: reqDeliveryCharge, deliveryDistance: reqDeliveryDistance, deliveryDistanceKm: reqDeliveryDistanceKm } = req.body;
 
     if (!customer || !customer.name || !customer.phone || !customer.address || !customer.city || !customer.pincode) {
@@ -496,13 +534,54 @@ exports.createOrder = async (req, res) => {
         quantity: Number(item.quantity),
         image: item.image || (dbProduct.images && dbProduct.images[0]) || '',
       });
+    }
 
-      if (dbProduct._id && dbProduct._id.toString().match(/^[0-9a-fA-F]{24}$/)) {
-        stockUpdates.push({
-          productId: dbProduct._id,
-          newStock: Math.max(0, dbProduct.stock - Number(item.quantity)),
+    // ── Atomic Concurrency-Safe Stock Reservation for COD/UPI ──
+    const deductedItems = [];
+    let stockErrorMsg = null;
+
+    for (const item of validatedItems) {
+      const reqQty = Number(item.quantity) || 1;
+      const pId = item.productId;
+
+      const query = { stock: { $gte: reqQty } };
+      if (pId && pId.toString().match(/^[0-9a-fA-F]{24}$/)) {
+        query._id = pId;
+      } else if (pId) {
+        query.productId = pId;
+      } else {
+        query.name = item.name;
+      }
+
+      const updatedProduct = await Product.findOneAndUpdate(
+        query,
+        { $inc: { stock: -reqQty } },
+        { new: true }
+      );
+
+      if (!updatedProduct) {
+        stockErrorMsg = `Insufficient stock for "${item.name}". The item may have been sold out concurrently.`;
+        break;
+      }
+
+      if (updatedProduct.stock <= 0) {
+        await Product.updateOne({ _id: updatedProduct._id }, { $set: { inStock: false } });
+      }
+
+      deductedItems.push({ productId: updatedProduct._id, quantity: reqQty });
+    }
+
+    if (stockErrorMsg) {
+      for (const dItem of deductedItems) {
+        await Product.findByIdAndUpdate(dItem.productId, {
+          $inc: { stock: dItem.quantity },
+          $set: { inStock: true },
         });
       }
+      return res.status(400).json({
+        success: false,
+        message: stockErrorMsg,
+      });
     }
 
     const deliveryCharge = (reqDeliveryCharge !== undefined && reqDeliveryCharge !== null && !isNaN(Number(reqDeliveryCharge)))
@@ -550,15 +629,7 @@ exports.createOrder = async (req, res) => {
       orderStatus: 'Pending',
     });
 
-    for (const update of stockUpdates) {
-      if (update.productId) {
-        await Product.findByIdAndUpdate(update.productId, {
-          $set: { stock: update.newStock },
-        });
-      }
-    }
-
-    console.log(`📦 [COD Order Created] Order #${orderId} saved in MongoDB | Total: ₹${grandTotal}`);
+    console.log(`📦 [Order Created] Order #${orderId} saved in MongoDB | Total: ₹${grandTotal}`);
 
     return res.status(201).json({
       success: true,
@@ -678,9 +749,12 @@ exports.getOrders = async (req, res) => {
  * GET /api/orders/track/:id or GET /api/orders/:id
  * Public Customer Order Tracking
  */
-exports.getOrderById = async (req, res) => {
+exports.trackOrderPublic = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!id || !id.trim()) {
+      return res.status(400).json({ success: false, message: 'Order ID or phone number is required.' });
+    }
     const cleanId = id.trim().toUpperCase();
 
     let order = await Order.findOne({ orderId: cleanId });
@@ -703,9 +777,37 @@ exports.getOrderById = async (req, res) => {
       });
     }
 
+    // Mask/Sanitize sensitive customer information for public tracking (Phase 7)
+    const publicOrder = {
+      orderId: order.orderId,
+      items: order.items ? order.items.map(item => ({
+        name: item.name,
+        price: item.price,
+        size: item.size,
+        color: item.color,
+        quantity: item.quantity,
+        image: item.image,
+      })) : [],
+      subtotal: order.subtotal,
+      deliveryCharge: order.deliveryCharge,
+      totalAmount: order.totalAmount,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      orderStatus: order.orderStatus,
+      deliveryBoyStatus: order.deliveryBoyStatus,
+      estimatedDeliveryTime: order.estimatedDeliveryTime,
+      expectedDeliveryDate: order.expectedDeliveryDate,
+      createdAt: order.createdAt,
+      customer: {
+        name: order.customer ? order.customer.name : '',
+        city: order.customer ? order.customer.city : '',
+        pincode: order.customer ? order.customer.pincode : '',
+      },
+    };
+
     return res.json({
       success: true,
-      order,
+      order: publicOrder,
     });
   } catch (err) {
     console.error('Error tracking order:', err.message);
@@ -715,6 +817,45 @@ exports.getOrderById = async (req, res) => {
     });
   }
 };
+
+exports.getOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cleanId = id.trim().toUpperCase();
+
+    let order = await Order.findOne({ orderId: cleanId });
+
+    if (!order && id.match(/^[0-9a-fA-F]{24}$/)) {
+      order = await Order.findById(id);
+    }
+
+    if (!order) {
+      const cleanPhone = id.replace(/\D/g, '');
+      if (cleanPhone.length >= 10) {
+        order = await Order.findOne({ 'customer.phone': cleanPhone }).sort({ createdAt: -1 });
+      }
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: `Order #${id} not found.`,
+      });
+    }
+
+    return res.json({
+      success: true,
+      order,
+    });
+  } catch (err) {
+    console.error('Error fetching order:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching order: ' + err.message,
+    });
+  }
+};
+
 
 /**
  * PUT /api/orders/:id
@@ -731,6 +872,8 @@ exports.updateOrderStatus = async (req, res) => {
       paymentTime,
       estimatedDeliveryTime,
       expectedDeliveryDate,
+      deliveryBoyName,
+      deliveryBoyPhone,
     } = req.body;
 
     // Normalize ORDER STATUS from UI labels if needed
@@ -833,6 +976,9 @@ exports.updateOrderStatus = async (req, res) => {
 
     if (paymentDate !== undefined) order.paymentDate = paymentDate;
     if (paymentTime !== undefined) order.paymentTime = paymentTime;
+
+    if (deliveryBoyName !== undefined) order.deliveryBoyName = deliveryBoyName ? deliveryBoyName.toString().trim() : '';
+    if (deliveryBoyPhone !== undefined) order.deliveryBoyPhone = deliveryBoyPhone ? deliveryBoyPhone.toString().trim() : '';
 
     if (estimatedDeliveryTime !== undefined) order.estimatedDeliveryTime = estimatedDeliveryTime;
     if (expectedDeliveryDate !== undefined) order.expectedDeliveryDate = expectedDeliveryDate;
@@ -1540,13 +1686,6 @@ exports.sendOrderToDeliveryBoy = async (req, res) => {
       sendTime,
     } = req.body;
 
-    if (!deliveryBoyName || !deliveryBoyName.toString().trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please select or enter a Delivery Boy name.',
-      });
-    }
-
     let order = await Order.findOne({ orderId: id.toUpperCase() });
     if (!order && id.match(/^[0-9a-fA-F]{24}$/)) {
       order = await Order.findById(id);
@@ -1563,11 +1702,20 @@ exports.sendOrderToDeliveryBoy = async (req, res) => {
     const formattedDate = sendDate || dObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     const formattedTime = sendTime || dObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    order.deliveryBoyId = deliveryBoyId || '';
-    order.deliveryBoyName = deliveryBoyName.trim();
-    order.deliveryBoyPhone = deliveryBoyPhone ? deliveryBoyPhone.trim() : '';
+    if (deliveryBoyName && deliveryBoyName.toString().trim()) {
+      order.deliveryBoyName = deliveryBoyName.trim();
+      order.deliveryBoyPhone = deliveryBoyPhone ? deliveryBoyPhone.trim() : '';
+      if (deliveryBoyId) order.deliveryBoyId = deliveryBoyId;
+    }
     order.deliverySendStatus = 'DELIVERY SENT';
-    order.deliveryBoyStatus = 'DELIVERY BOY RECEIVED';
+    if (!order.deliveryBoyName) {
+      order.deliveryAssignmentStatus = 'Waiting for Delivery Boy to Accept';
+      order.deliveryBoyStatus = 'DELIVERY BOY PENDING';
+    } else {
+      order.deliveryAssignmentStatus = 'Accepted';
+      order.deliveryBoyStatus = 'DELIVERY BOY RECEIVED';
+    }
+
     if (!order.orderStatus || order.orderStatus === 'Pending') {
       order.orderStatus = 'Confirmed';
     }
@@ -1576,16 +1724,13 @@ exports.sendOrderToDeliveryBoy = async (req, res) => {
     order.deliverySentAt = dObj;
     order.deliverySource = 'LITRA KING STORE';
 
-    // Preserve payment status intact (COD remains Pending/Paid as set; Online remains Paid)
-    // Preserve order status without prematurely setting Delivered or Customer Reached
-
     await order.save();
 
-    console.log(`🚚 [Delivery Send] Order #${order.orderId} sent to Delivery Boy ${order.deliveryBoyName} (${order.deliveryBoyPhone}) on ${formattedDate} at ${formattedTime}.`);
+    console.log(`🚚 [Delivery Send] Order #${order.orderId} sent to delivery workflow on ${formattedDate} at ${formattedTime}.`);
 
     return res.json({
       success: true,
-      message: `Order #${order.orderId} package sent successfully to Delivery Boy ${order.deliveryBoyName}!`,
+      message: `Order #${order.orderId} successfully sent to Delivery Boy workflow!`,
       order,
     });
   } catch (err) {
@@ -1593,6 +1738,78 @@ exports.sendOrderToDeliveryBoy = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to send order to delivery boy: ' + err.message,
+    });
+  }
+};
+
+/**
+ * POST /api/orders/:id/accept-delivery
+ * Public / Delivery Endpoint: Delivery Boy accepts assigned order and records actual Name, Phone, and Timestamp
+ */
+exports.acceptDeliveryOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { deliveryBoyName, deliveryBoyPhone, deliveryBoyId } = req.body;
+
+    if (!deliveryBoyName || !deliveryBoyName.toString().trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter Delivery Boy Name to accept this order.',
+      });
+    }
+
+    if (!deliveryBoyPhone || !deliveryBoyPhone.toString().trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter Delivery Boy Phone Number to accept this order.',
+      });
+    }
+
+    let order = await Order.findOne({ orderId: id.toUpperCase() });
+    if (!order && id.match(/^[0-9a-fA-F]{24}$/)) {
+      order = await Order.findById(id);
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: `Order #${id} not found in database.`,
+      });
+    }
+
+    const dObj = new Date();
+    const formattedAcceptanceTime = dObj.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    order.deliveryBoyName = deliveryBoyName.trim();
+    order.deliveryBoyPhone = deliveryBoyPhone.trim();
+    if (deliveryBoyId) order.deliveryBoyId = deliveryBoyId.trim();
+    order.deliveryAssignmentStatus = 'Accepted';
+    order.deliveryBoyStatus = 'DELIVERY BOY RECEIVED';
+    order.deliverySendStatus = 'DELIVERY SENT';
+    order.deliveryBoyAcceptedAt = dObj;
+    order.deliveryBoyAcceptedAtFormatted = formattedAcceptanceTime;
+
+    await order.save();
+
+    console.log(`✅ [Delivery Acceptance] Order #${order.orderId} accepted by ${order.deliveryBoyName} (${order.deliveryBoyPhone}) at ${formattedAcceptanceTime}.`);
+
+    return res.json({
+      success: true,
+      message: `Order #${order.orderId} successfully accepted by ${order.deliveryBoyName}!`,
+      order,
+    });
+  } catch (err) {
+    console.error('Error accepting delivery order:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to accept order: ' + err.message,
     });
   }
 };
@@ -1609,6 +1826,8 @@ exports.getAssignedOrdersForDeliveryBoy = async (req, res) => {
       $or: [
         { deliveryBoyStatus: 'DELIVERY SENT' },
         { deliverySendStatus: 'DELIVERY SENT' },
+        { deliveryAssignmentStatus: 'Waiting for Delivery Boy to Accept' },
+        { deliveryAssignmentStatus: 'Accepted' },
         { deliveryBoyName: { $exists: true, $ne: '' } },
       ],
     };
@@ -1697,9 +1916,12 @@ exports.getAssignedOrdersForDeliveryBoy = async (req, res) => {
         orderStatus: ord.orderStatus || 'Confirmed',
         deliveryBoyStatus: ord.deliveryBoyStatus || 'DELIVERY SENT',
         deliverySendStatus: ord.deliverySendStatus || 'DELIVERY SENT',
+        deliveryAssignmentStatus: ord.deliveryAssignmentStatus || (ord.deliveryBoyName ? 'Accepted' : 'Waiting for Delivery Boy to Accept'),
         deliveryBoyId: ord.deliveryBoyId || '',
         deliveryBoyName: ord.deliveryBoyName || '',
         deliveryBoyPhone: ord.deliveryBoyPhone || '',
+        deliveryBoyAcceptedAt: ord.deliveryBoyAcceptedAt,
+        deliveryBoyAcceptedAtFormatted: ord.deliveryBoyAcceptedAtFormatted || '',
         deliverySendDate: ord.deliverySendDate || '',
         deliverySendTime: ord.deliverySendTime || '',
         deliverySource: ord.deliverySource || 'LITRA KING STORE',
