@@ -7,7 +7,7 @@ import Footer from '../components/Footer';
 export default function HomePage({ onProductSelect }) {
   return (
     <>
-      <Hero />
+      <Hero onProductSelect={onProductSelect} />
       <Collection onProductSelect={onProductSelect} />
       <LocationSection />
       <Footer />

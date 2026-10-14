@@ -348,7 +348,7 @@ exports.uploadProductImage = async (req, res) => {
  */
 exports.createProduct = async (req, res) => {
   try {
-    const { name, brand, category, description, price, originalPrice, images, image, sizes, colors, color, stock, tag, isFeatured } = req.body;
+    const { name, brand, category, description, price, originalPrice, images, image, sizes, colors, color, stock, tag, isFeatured, video, videoEnabled, isHeroVideo } = req.body;
 
     if (!name || !category || !description || price === undefined || price === null || price === '') {
       return res.status(400).json({
@@ -416,6 +416,9 @@ exports.createProduct = async (req, res) => {
       inStock: isStockAvailable,
       tag: (tag || 'New').trim(),
       isFeatured: isFeatured !== undefined ? !!isFeatured : true,
+      video: video && typeof video === 'string' ? video.trim() : '',
+      videoEnabled: videoEnabled !== false,
+      isHeroVideo: Boolean(isHeroVideo),
     });
 
     return res.status(201).json({
@@ -463,6 +466,18 @@ exports.updateProduct = async (req, res) => {
       updateData.inStock = Boolean(updateData.inStock);
     }
 
+    if (updateData.video !== undefined) {
+      updateData.video = typeof updateData.video === 'string' ? updateData.video.trim() : '';
+    }
+
+    if (updateData.videoEnabled !== undefined) {
+      updateData.videoEnabled = Boolean(updateData.videoEnabled);
+    }
+
+    if (updateData.isHeroVideo !== undefined) {
+      updateData.isHeroVideo = Boolean(updateData.isHeroVideo);
+    }
+
     if (updateData.stock !== undefined) {
       const numStock = Number(updateData.stock);
       if (!isNaN(numStock) && numStock >= 0) {
@@ -487,7 +502,9 @@ exports.updateProduct = async (req, res) => {
       updateData.colors = updateData.colors.split(',').map(c => c.trim()).filter(Boolean);
     }
 
-    if (updateData.image && typeof updateData.image === 'string' && updateData.image.trim()) {
+    if (Array.isArray(updateData.images) && updateData.images.length > 0) {
+      updateData.images = updateData.images.filter(Boolean);
+    } else if (updateData.image && typeof updateData.image === 'string' && updateData.image.trim()) {
       updateData.images = [updateData.image.trim()];
     }
 
@@ -594,6 +611,19 @@ exports.deleteProduct = async (req, res) => {
         success: false,
         message: 'Product not found',
       });
+    }
+
+    if (product.video && product.video.startsWith('/uploads/videos/')) {
+      try {
+        const path = require('path');
+        const fs = require('fs');
+        const vPath = path.join(__dirname, '../uploads/videos', product.video.replace(/^\/uploads\/videos\//, ''));
+        if (fs.existsSync(vPath)) {
+          fs.unlinkSync(vPath);
+        }
+      } catch (err) {
+        console.warn('Could not delete video file:', err.message);
+      }
     }
 
     return res.json({

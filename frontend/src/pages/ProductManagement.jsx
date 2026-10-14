@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShoppingBag, Plus, Trash2, Edit3, Upload, Check, AlertCircle, RefreshCw, Search, ShieldCheck, ArrowLeft, Image as ImageIcon, X } from 'lucide-react';
+import { ShoppingBag, Plus, Trash2, Edit3, Upload, Check, AlertCircle, RefreshCw, Search, ShieldCheck, ArrowLeft, Image as ImageIcon, X, Video, Sparkles, Film } from 'lucide-react';
 import { getApiUrl } from '../config/api';
+import AIVideoGeneratorModal from '../components/AIVideoGeneratorModal';
+import { deleteShoeVideo, toggleShoeVideo, setHeroVideo } from '../api/aiVideoApi';
 
 const CATEGORIES = [
   'Running Shoes',
@@ -29,6 +31,9 @@ const INITIAL_FORM = {
   tag: 'New',
   description: '',
   image: '',
+  video: '',
+  videoEnabled: true,
+  isHeroVideo: false,
 };
 
 export default function ProductManagement({ onBack }) {
@@ -39,6 +44,7 @@ export default function ProductManagement({ onBack }) {
 
   const [formData, setFormData] = useState(INITIAL_FORM);
   const [editingId, setEditingId] = useState(null);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
   const [imagePreview, setImagePreview] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -231,6 +237,9 @@ export default function ProductManagement({ onBack }) {
       tag: formData.tag || 'New',
       images: [finalImage],
       image: finalImage,
+      video: formData.video || '',
+      videoEnabled: Boolean(formData.videoEnabled),
+      isHeroVideo: Boolean(formData.isHeroVideo),
     };
 
     try {
@@ -284,6 +293,9 @@ export default function ProductManagement({ onBack }) {
       tag: prod.tag || 'New',
       description: prod.description || '',
       image: imgUrl,
+      video: prod.video || '',
+      videoEnabled: prod.videoEnabled !== false,
+      isHeroVideo: Boolean(prod.isHeroVideo),
     });
     setErrorMessage('');
     setSuccessMessage('');
@@ -686,6 +698,95 @@ export default function ProductManagement({ onBack }) {
             </div>
           </div>
 
+          {/* AI Shoe-to-Video Generator Section */}
+          <div className="p-4 bg-gradient-to-r from-zinc-950 via-zinc-900 to-indigo-950/40 border border-zinc-800 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <label className="block text-xs font-black text-white flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-400" /> AI Shoe-to-Video Generator
+                </label>
+                <p className="text-[11px] text-zinc-400">Generate a 360-degree promotional commercial video of this footwear</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsVideoModalOpen(true)}
+                className="py-2 px-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{formData.video ? 'Generate / Replace Video' : 'Generate AI Shoe Video'}</span>
+              </button>
+            </div>
+
+            {formData.video ? (
+              <div className="p-3 bg-zinc-950 border border-emerald-500/50 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5" /> Promotional Video Attached to Shoe
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm('Remove video from this shoe?')) {
+                        if (editingId) await deleteShoeVideo(editingId);
+                        setFormData((prev) => ({ ...prev, video: '', videoEnabled: false, isHeroVideo: false }));
+                        fetchProducts();
+                      }
+                    }}
+                    className="text-xs text-red-400 hover:text-red-300 font-bold"
+                  >
+                    Remove Video
+                  </button>
+                </div>
+
+                <div className="w-full max-h-52 bg-black rounded-lg overflow-hidden flex justify-center">
+                  <video
+                    src={formData.video.startsWith('http') || formData.video.startsWith('data:') ? formData.video : `http://localhost:5000${formData.video}`}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    className="max-h-52 w-full object-contain"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2 pt-1 text-xs text-zinc-300">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData.videoEnabled)}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setFormData((prev) => ({ ...prev, videoEnabled: val }));
+                        if (editingId) toggleShoeVideo(editingId, val);
+                      }}
+                      className="w-4 h-4 text-amber-500 rounded"
+                    />
+                    <span>Show Video on Product Details Page (replaces static photo)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData.isHeroVideo)}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setFormData((prev) => ({ ...prev, isHeroVideo: val }));
+                        if (editingId) setHeroVideo(editingId, val);
+                      }}
+                      className="w-4 h-4 text-amber-500 rounded"
+                    />
+                    <span>Feature this Shoe Video on Home Page Hero Media</span>
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl text-center text-xs text-zinc-400">
+                No video attached yet. Click <strong>"Generate AI Shoe Video"</strong> above to upload a photo and create a 360° promotional commercial.
+              </div>
+            )}
+          </div>
+
           {/* Form Submit Button */}
           <div className="pt-2">
             <button
@@ -882,6 +983,38 @@ export default function ProductManagement({ onBack }) {
         </div>
       )}
 
+      {/* AI Shoe-to-Video Generator Modal */}
+      {isVideoModalOpen && (
+        <AIVideoGeneratorModal
+          isOpen={isVideoModalOpen}
+          onClose={() => setIsVideoModalOpen(false)}
+          product={
+            editingId
+              ? products.find((p) => p._id === editingId || p.productId === editingId) || {
+                  _id: editingId,
+                  name: formData.name,
+                  image: formData.image,
+                  images: [formData.image],
+                }
+              : {
+                  productId: 'new-product',
+                  name: formData.name,
+                  image: formData.image || imagePreview,
+                  images: [formData.image || imagePreview].filter(Boolean),
+                }
+          }
+          onVideoSaved={(savedProd) => {
+            if (savedProd && savedProd.video) {
+              setFormData((prev) => ({
+                ...prev,
+                video: savedProd.video,
+                videoEnabled: true,
+              }));
+              fetchProducts();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

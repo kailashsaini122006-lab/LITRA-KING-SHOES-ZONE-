@@ -86,6 +86,19 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    video: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    videoEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    isHeroVideo: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

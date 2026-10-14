@@ -7,14 +7,16 @@ import {
   Search,
   Edit2,
   Trash2,
-  Image,
-  Tag,
-  Boxes,
-  CheckCircle,
-  XCircle,
-  Upload
+  Video,
+  Sparkles,
+  Play,
+  RotateCw,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { fetchProducts, createProduct, updateProduct, deleteProduct, toggleProductStock } from '../api/productApi';
+import AIVideoGeneratorModal from '../components/AIVideoGeneratorModal';
+import { deleteShoeVideo, toggleShoeVideo, setHeroVideo } from '../api/aiVideoApi';
 
 export const Products = () => {
   const [products, setProducts] = useState([]);
@@ -23,6 +25,7 @@ export const Products = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
   // Form State
   const initialForm = {
@@ -37,7 +40,10 @@ export const Products = () => {
     description: '',
     images: ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80'],
     sizes: [6, 7, 8, 9, 10],
-    colors: ['Black', 'White']
+    colors: ['Black', 'White'],
+    video: '',
+    videoEnabled: true,
+    isHeroVideo: false
   };
 
   const [form, setForm] = useState(initialForm);
@@ -94,7 +100,10 @@ export const Products = () => {
       description: prod.description || '',
       images: prod.images && prod.images.length > 0 ? prod.images : ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80'],
       sizes: prod.sizes || [6, 7, 8, 9, 10],
-      colors: prod.colors || ['Black', 'White']
+      colors: prod.colors || ['Black', 'White'],
+      video: prod.video || '',
+      videoEnabled: prod.videoEnabled !== false,
+      isHeroVideo: Boolean(prod.isHeroVideo)
     });
     setIsModalOpen(true);
   };
@@ -107,6 +116,50 @@ export const Products = () => {
     });
   };
 
+  const handleAddAngleImage = () => {
+    setForm((prev) => ({
+      ...prev,
+      images: [...prev.images, '']
+    }));
+  };
+
+  const handleUpdateAngleImage = (index, value) => {
+    setForm((prev) => {
+      const updated = [...prev.images];
+      updated[index] = value;
+      return { ...prev, images: updated };
+    });
+  };
+
+  const handleRemoveAngleImage = (index) => {
+    setForm((prev) => {
+      const updated = prev.images.filter((_, i) => i !== index);
+      return { ...prev, images: updated.length ? updated : [''] };
+    });
+  };
+
+  const handleSetMainImage = (index) => {
+    setForm((prev) => {
+      if (index === 0) return prev;
+      const updated = [...prev.images];
+      const [moved] = updated.splice(index, 1);
+      updated.unshift(moved);
+      return { ...prev, images: updated };
+    });
+  };
+
+  const handleMoveAngleImage = (index, direction) => {
+    setForm((prev) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= prev.images.length) return prev;
+      const updated = [...prev.images];
+      const temp = updated[index];
+      updated[index] = updated[targetIndex];
+      updated[targetIndex] = temp;
+      return { ...prev, images: updated };
+    });
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     const payload = {
@@ -114,7 +167,10 @@ export const Products = () => {
       price: Number(form.price),
       originalPrice: form.originalPrice ? Number(form.originalPrice) : Math.round(Number(form.price) * 1.3),
       stock: Number(form.stock),
-      inStock: Boolean(form.inStock)
+      inStock: Boolean(form.inStock),
+      video: form.video || '',
+      videoEnabled: Boolean(form.videoEnabled),
+      isHeroVideo: Boolean(form.isHeroVideo)
     };
 
     if (editingProduct) {
@@ -125,6 +181,56 @@ export const Products = () => {
 
     setIsModalOpen(false);
     loadProducts();
+  };
+
+  const handleVideoSaved = (savedProduct) => {
+    if (savedProduct && savedProduct.video) {
+      setForm((prev) => ({
+        ...prev,
+        video: savedProduct.video,
+        videoEnabled: true,
+      }));
+      if (editingProduct) {
+        setEditingProduct((prev) => ({
+          ...prev,
+          video: savedProduct.video,
+          videoEnabled: true,
+        }));
+      }
+      loadProducts();
+    }
+  };
+
+  const handleRemoveVideo = async () => {
+    if (!window.confirm('Are you sure you want to remove the promotional video from this product?')) {
+      return;
+    }
+    const targetId = editingProduct?._id || editingProduct?.productId || form.productId;
+    if (targetId) {
+      await deleteShoeVideo(targetId);
+    }
+    setForm((prev) => ({ ...prev, video: '', videoEnabled: false, isHeroVideo: false }));
+    loadProducts();
+  };
+
+  const handleToggleVideoEnabled = async () => {
+    const nextVal = !form.videoEnabled;
+    setForm((prev) => ({ ...prev, videoEnabled: nextVal }));
+    const targetId = editingProduct?._id || editingProduct?.productId;
+    if (targetId) {
+      await toggleShoeVideo(targetId, nextVal);
+      loadProducts();
+    }
+  };
+
+  const handleToggleHeroVideo = async () => {
+    const nextVal = !form.isHeroVideo;
+    setForm((prev) => ({ ...prev, isHeroVideo: nextVal }));
+    const targetId = editingProduct?._id || editingProduct?.productId;
+    if (targetId) {
+      await setHeroVideo(targetId, nextVal);
+      loadProducts();
+    }
   };
 
   const handleDelete = async (id) => {
@@ -198,7 +304,13 @@ export const Products = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredProducts.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>
+                  Loading product inventory...
+                </td>
+              </tr>
+            ) : filteredProducts.length === 0 ? (
               <tr>
                 <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                   No footwear products found matching criteria.
@@ -219,7 +331,29 @@ export const Products = () => {
                     />
                   </td>
                   <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{prod.productId || 'N/A'}</td>
-                  <td style={{ fontWeight: 600 }}>{prod.name}</td>
+                  <td>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <span style={{ fontWeight: 600 }}>{prod.name}</span>
+                      {prod.video && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: 'rgba(245, 158, 11, 0.15)',
+                          color: '#f59e0b',
+                          border: '1px solid rgba(245, 158, 11, 0.4)',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          width: 'fit-content'
+                        }}>
+                          <Video size={10} /> AI 360° Video
+                          {prod.isHeroVideo && ' • Home Hero'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td>{prod.category}</td>
                   <td style={{ fontWeight: 700 }}>
                     ₹{prod.price?.toLocaleString()}{' '}
@@ -405,27 +539,101 @@ export const Products = () => {
             </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Product Image URL</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="https://..."
-              value={form.images[0] || ''}
-              onChange={(e) => setForm({ ...form, images: [e.target.value] })}
-              required
-            />
-            {form.images[0] && (
-              <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <img
-                  src={form.images[0]}
-                  alt="Preview"
-                  style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border-color)' }}
-                  onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=150&q=80'; }}
-                />
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Image Preview</span>
-              </div>
-            )}
+          {/* Multi-Angle Product Gallery Manager */}
+          <div className="form-group" style={{ background: 'var(--bg-card)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>
+                Product Angle Images Gallery ({form.images.length} {form.images.length === 1 ? 'Angle' : 'Angles'})
+              </label>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                onClick={handleAddAngleImage}
+              >
+                + Add Angle Image
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {form.images.map((imgUrl, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, width: '70px', flexShrink: 0 }}>
+                    {idx === 0 ? '★ Main' : `Angle ${idx + 1}`}
+                  </span>
+
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder={`Image URL for Angle ${idx + 1}...`}
+                    value={imgUrl}
+                    onChange={(e) => handleUpdateAngleImage(idx, e.target.value)}
+                    required={idx === 0}
+                  />
+
+                  {idx > 0 && (
+                    <button
+                      type="button"
+                      title="Make Primary Image"
+                      onClick={() => handleSetMainImage(idx)}
+                      style={{ padding: '0.3rem 0.5rem', fontSize: '0.7rem', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Make Main
+                    </button>
+                  )}
+
+                  {idx > 0 && (
+                    <button
+                      type="button"
+                      title="Move Up"
+                      onClick={() => handleMoveAngleImage(idx, -1)}
+                      style={{ padding: '0.3rem 0.4rem', fontSize: '0.7rem', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      ↑
+                    </button>
+                  )}
+
+                  {idx < form.images.length - 1 && (
+                    <button
+                      type="button"
+                      title="Move Down"
+                      onClick={() => handleMoveAngleImage(idx, 1)}
+                      style={{ padding: '0.3rem 0.4rem', fontSize: '0.7rem', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      ↓
+                    </button>
+                  )}
+
+                  {form.images.length > 1 && (
+                    <button
+                      type="button"
+                      title="Remove Angle"
+                      onClick={() => handleRemoveAngleImage(idx)}
+                      style={{ padding: '0.3rem 0.5rem', fontSize: '0.7rem', color: '#f87171', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Thumbnail Previews Grid */}
+            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {form.images.map((imgUrl, idx) => (
+                <div key={idx} style={{ position: 'relative' }}>
+                  <img
+                    src={imgUrl || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=150&q=80'}
+                    alt={`Preview ${idx + 1}`}
+                    style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: idx === 0 ? '2px solid #f59e0b' : '1px solid var(--border-color)' }}
+                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=150&q=80'; }}
+                  />
+                  <span style={{ position: 'absolute', bottom: '2px', right: '2px', fontSize: '0.65rem', background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '0 3px', borderRadius: '3px' }}>
+                    {idx + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="form-group">
@@ -439,6 +647,130 @@ export const Products = () => {
             />
           </div>
 
+          {/* AI Shoe-to-Video Generator Section */}
+          <div
+            className="form-group"
+            style={{
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 27, 75, 0.4) 100%)',
+              border: '1px solid #334155',
+              borderRadius: '10px',
+              padding: '1.2rem',
+              marginTop: '1.25rem',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <label className="form-label" style={{ fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f8fafc' }}>
+                  <Sparkles size={16} color="#f59e0b" /> AI Shoe-to-Video Generator
+                </label>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Generate a smooth 360-degree promotional commercial video of this footwear
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setIsVideoModalOpen(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  color: '#000',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  padding: '0.45rem 0.9rem',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+                }}
+              >
+                <Sparkles size={15} />
+                {form.video ? 'Generate / Replace AI Video' : 'Generate AI Shoe Video'}
+              </button>
+            </div>
+
+            {/* Video Preview Card if video is attached */}
+            {form.video ? (
+              <div
+                style={{
+                  background: '#0a0f1d',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  border: '1px solid #10b981',
+                  marginTop: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Check size={14} /> Video Attached to Product
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveVideo}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#f87171',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Remove Video
+                  </button>
+                </div>
+
+                <div style={{ width: '100%', maxHeight: '220px', borderRadius: '6px', overflow: 'hidden', background: '#000', display: 'flex', justifyContent: 'center' }}>
+                  <video
+                    src={form.video.startsWith('http') || form.video.startsWith('data:') ? form.video : `http://localhost:5000${form.video}`}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    style={{ maxHeight: '220px', maxWidth: '100%', objectFit: 'contain' }}
+                  />
+                </div>
+
+                {/* Video Controls / Switches */}
+                <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#cbd5e1', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.videoEnabled)}
+                      onChange={handleToggleVideoEnabled}
+                    />
+                    <span>Show Video on Customer Product Details Page (replaces static photo with video player)</span>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#cbd5e1', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.isHeroVideo)}
+                      onChange={handleToggleHeroVideo}
+                    />
+                    <span>Feature this Shoe Video on Home Page Hero Media (replaces store photo)</span>
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: 'rgba(0,0,0,0.25)',
+                  border: '1px dashed #334155',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  textAlign: 'center',
+                  color: '#94a3b8',
+                  fontSize: '0.82rem',
+                }}
+              >
+                <Video size={28} color="#64748b" style={{ margin: '0 auto 0.4rem auto' }} />
+                No promotional video attached yet. Click <strong>"Generate AI Shoe Video"</strong> above to upload a shoe photo and generate a 360° commercial.
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
             <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
               Cancel
@@ -449,6 +781,15 @@ export const Products = () => {
           </div>
         </form>
       </Modal>
+      {/* AI Shoe-to-Video Generator Modal */}
+      {isVideoModalOpen && (
+        <AIVideoGeneratorModal
+          isOpen={isVideoModalOpen}
+          onClose={() => setIsVideoModalOpen(false)}
+          product={editingProduct || form}
+          onVideoSaved={handleVideoSaved}
+        />
+      )}
     </AdminLayout>
   );
 };

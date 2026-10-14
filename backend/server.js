@@ -10,6 +10,8 @@ const dataEntryRoutes = require('./routes/dataEntryRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const deliveryHandoverRoutes = require('./routes/deliveryHandoverRoutes');
+const aiVideoRoutes = require('./routes/aiVideoRoutes');
+const siteSettingsRoutes = require('./routes/siteSettingsRoutes');
 const productController = require('./controllers/productController');
 
 const app = express();
@@ -69,10 +71,14 @@ app.options('*', cors(corsOptions));
 const path = require('path');
 const fs = require('fs');
 
-// Ensure uploads folder exists for product images
+// Ensure uploads folder and videos folder exist
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+const videosDir = path.join(uploadsDir, 'videos');
+if (!fs.existsSync(videosDir)) {
+  fs.mkdirSync(videosDir, { recursive: true });
 }
 app.use('/uploads', express.static(uploadsDir));
 
@@ -116,6 +122,8 @@ app.use('/api/data-entry', dataEntryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/delivery-handover', deliveryHandoverRoutes);
+app.use('/api/ai-video', aiVideoRoutes);
+app.use('/api/settings', siteSettingsRoutes);
 
 // Direct Route Aliases for maximum compatibility
 const orderController = require('./controllers/orderController');

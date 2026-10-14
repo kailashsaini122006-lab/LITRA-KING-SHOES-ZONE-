@@ -1,8 +1,53 @@
-import React from 'react';
-import { Navigation, Tag, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Navigation, Tag, ArrowLeft, Sparkles, Video, Eye, ArrowRight } from 'lucide-react';
 import heroShopImg from '../assets/hero_shop.png';
+import { getApiUrl } from '../config/api';
 
-export default function Hero() {
+export default function Hero({ onProductSelect }) {
+  const [heroSettings, setHeroSettings] = useState({
+    heroVideoEnabled: false,
+    heroProduct: null,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchHeroSettings = async () => {
+      try {
+        const res = await fetch(getApiUrl('/settings'));
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data && data.success) {
+            setHeroSettings({
+              heroVideoEnabled: Boolean(data.heroVideoEnabled && data.heroProduct?.video),
+              heroProduct: data.heroProduct,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Hero settings fetch notice:', err.message);
+      }
+    };
+
+    fetchHeroSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const resolveVideoUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+    if (url.startsWith('/uploads/')) {
+      const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const baseUrl = envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+      return `${baseUrl}${url}`;
+    }
+    return url;
+  };
+
+  const isVideoHero = Boolean(heroSettings.heroVideoEnabled && heroSettings.heroProduct?.video);
+  const featuredProduct = heroSettings.heroProduct;
+
   return (
     <section id="home" className="relative min-h-screen pt-24 sm:pt-28 md:pt-36 pb-16 md:pb-24 flex items-start lg:items-center bg-zinc-950 overflow-hidden">
       {/* Background Radial Glow */}
@@ -66,34 +111,98 @@ export default function Hero() {
 
           </div>
 
-          {/* Right Hero Image Card Container */}
+          {/* Right Hero Media Card Container */}
           <div className="lg:col-span-5 relative">
             <div className="relative mx-auto max-w-md lg:max-w-none">
               
               {/* Decorative Frame */}
               <div className="absolute -inset-1.5 bg-gradient-to-r from-amber-500 via-red-500 to-amber-600 rounded-3xl blur-md opacity-40"></div>
 
-              {/* Main Shop Image Card */}
+              {/* Main Media Card (Video OR Store Photo based on Admin setting) */}
               <div className="relative rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-700/60 shadow-2xl group">
-                <img
-                  src={heroShopImg}
-                  alt="LITRA KING SHOES ZONE Actual Shop Front in Chomu"
-                  className="w-full h-[420px] sm:h-[520px] object-cover object-center transform group-hover:scale-105 transition-transform duration-700"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-80"></div>
+                {isVideoHero ? (
+                  /* Admin Selected Shoe Promotional 360° Video */
+                  <div className="relative w-full h-[420px] sm:h-[520px] bg-black flex items-center justify-center">
+                    <video
+                      src={resolveVideoUrl(featuredProduct.video)}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-full object-contain"
+                    />
 
-                {/* Floating Store Badge Overlay */}
-                <div className="absolute bottom-4 left-4 right-4 bg-zinc-950/90 backdrop-blur-md p-4 rounded-xl border border-amber-500/30 flex items-center justify-between shadow-2xl">
-                  <div>
-                    <p className="text-xs text-amber-400 font-extrabold uppercase tracking-wider">Actual Store Photo</p>
-                    <p className="text-white font-bold text-base">LITRA KING, Chomu (Rajasthan)</p>
+                    {/* Top Floating Badge */}
+                    <div className="absolute top-4 left-4 z-20">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-500/30 text-amber-300 border border-amber-500/50 backdrop-blur-md shadow-lg shadow-amber-950/50 animate-pulse">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>FEATURED 360° SHOE VIDEO</span>
+                      </span>
+                    </div>
+
+                    {/* Gradient shading */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-90 pointer-events-none"></div>
+
+                    {/* Floating Product Details Overlay on Video */}
+                    <div className="absolute bottom-4 left-4 right-4 bg-zinc-950/90 backdrop-blur-md p-4 rounded-xl border border-amber-500/40 flex items-center justify-between shadow-2xl z-20">
+                      <div className="min-w-0 flex-1 pr-3">
+                        <p className="text-[10px] text-amber-400 font-extrabold uppercase tracking-wider">
+                          {featuredProduct.brand || 'LITRA KING'} • {featuredProduct.category || 'Footwear'}
+                        </p>
+                        <p className="text-white font-black text-sm sm:text-base leading-snug truncate">
+                          {featuredProduct.name}
+                        </p>
+                        <p className="text-amber-400 font-black text-sm font-mono mt-0.5">
+                          ₹{featuredProduct.price}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0">
+                        {onProductSelect ? (
+                          <button
+                            type="button"
+                            onClick={() => onProductSelect(featuredProduct)}
+                            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 text-xs font-black px-3.5 py-2 rounded-lg uppercase tracking-wider shadow-lg transition-transform hover:scale-105 cursor-pointer"
+                          >
+                            <span>View Shoe</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <a
+                            href="#collection"
+                            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 text-xs font-black px-3.5 py-2 rounded-lg uppercase tracking-wider shadow-lg transition-transform hover:scale-105"
+                          >
+                            <span>View Shoe</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="inline-block bg-red-600 text-white text-xs font-black px-2.5 py-1 rounded-md uppercase">
-                      Wholesale Hub
-                    </span>
-                  </div>
-                </div>
+                ) : (
+                  /* Store Exterior Photo (Default when Hero video setting is disabled) */
+                  <>
+                    <img
+                      src={heroShopImg}
+                      alt="LITRA KING SHOES ZONE Actual Shop Front in Chomu"
+                      className="w-full h-[420px] sm:h-[520px] object-cover object-center transform group-hover:scale-105 transition-transform duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-80 pointer-events-none"></div>
+
+                    {/* Floating Store Badge Overlay */}
+                    <div className="absolute bottom-4 left-4 right-4 bg-zinc-950/90 backdrop-blur-md p-4 rounded-xl border border-amber-500/30 flex items-center justify-between shadow-2xl">
+                      <div>
+                        <p className="text-xs text-amber-400 font-extrabold uppercase tracking-wider">Actual Store Photo</p>
+                        <p className="text-white font-bold text-base">LITRA KING, Chomu (Rajasthan)</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block bg-red-600 text-white text-xs font-black px-2.5 py-1 rounded-md uppercase">
+                          Wholesale Hub
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
             </div>

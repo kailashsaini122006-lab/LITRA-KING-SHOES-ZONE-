@@ -1,26 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { X, Star, ShoppingBag, Zap, ShieldCheck, Truck, Check, Minus, Plus, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { X, Star, ShoppingBag, Zap, ShieldCheck, Truck, Check, Minus, Plus, AlertCircle, Play, Pause, Volume2, VolumeX, Video, Sparkles, RotateCw } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import Shoe360Viewer from './Shoe360Viewer';
 
 export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow }) {
   const { addToCart, startBuyNow } = useCart();
 
-  const [selectedImage, setSelectedImage] = useState('');
   const [selectedSize, setSelectedSize] = useState(8);
   const [selectedColor, setSelectedColor] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [addedMessage, setAddedMessage] = useState(false);
   const [unavailableAlert, setUnavailableAlert] = useState(false);
 
+  // Video State
+  const hasVideo = Boolean(product?.video && product?.videoEnabled !== false);
+  const [activeMediaTab, setActiveMediaTab] = useState(hasVideo ? 'video' : 'images');
+  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
+  const [isVideoMuted, setIsVideoMuted] = useState(true);
+  const videoRef = useRef(null);
+
+  const imagesList = useMemo(() => {
+    return Array.isArray(product?.images) && product.images.length > 0
+      ? product.images
+      : [product?.img || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80'];
+  }, [product]);
+
   useEffect(() => {
     if (product) {
-      const defaultImg = Array.isArray(product.images) && product.images.length ? product.images[0] : (product.img || '');
-      setSelectedImage(defaultImg);
       setSelectedSize(Array.isArray(product.sizes) && product.sizes.length ? product.sizes[0] : 8);
       const colorVal = product.color || (Array.isArray(product.colors) && product.colors.length ? product.colors[0] : 'Default');
       setSelectedColor(colorVal);
       setQuantity(1);
       setAddedMessage(false);
+      setActiveMediaTab(product.video && product.videoEnabled !== false ? 'video' : 'images');
+      setIsVideoPlaying(true);
     }
   }, [product]);
 
@@ -41,10 +54,6 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
   }, [isOpen, product, onClose]);
 
   if (!isOpen || !product) return null;
-
-  const imagesList = Array.isArray(product.images) && product.images.length > 0
-    ? product.images
-    : [product.img || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80'];
 
   const sizesList = Array.isArray(product.sizes) && product.sizes.length > 0 ? product.sizes : [6, 7, 8, 9, 10];
 
@@ -77,9 +86,40 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
       return;
     }
     const colorToUse = selectedColor || product.color || 'Standard';
-    startBuyNow(product, selectedSize, colorToUse, quantity, selectedImage);
+    const mainImg = imagesList[0] || product.img;
+    startBuyNow(product, selectedSize, colorToUse, quantity, mainImg);
     onClose();
     if (onBuyNow) onBuyNow();
+  };
+
+  const togglePlayVideo = (e) => {
+    if (e) e.stopPropagation();
+    if (!videoRef.current) return;
+    if (isVideoPlaying) {
+      videoRef.current.pause();
+      setIsVideoPlaying(false);
+    } else {
+      videoRef.current.play();
+      setIsVideoPlaying(true);
+    }
+  };
+
+  const toggleMuteVideo = (e) => {
+    if (e) e.stopPropagation();
+    if (!videoRef.current) return;
+    videoRef.current.muted = !isVideoMuted;
+    setIsVideoMuted(!isVideoMuted);
+  };
+
+  const resolveVideoUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+    if (url.startsWith('/uploads/')) {
+      const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const baseUrl = envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+      return `${baseUrl}${url}`;
+    }
+    return url;
   };
 
   return (
@@ -111,33 +151,105 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
         {/* Scrollable Body */}
         <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-12 gap-8">
           
-          {/* Left Column: Image Viewer */}
+          {/* Left Column: Interactive 360 Viewer or AI Shoe Video Player */}
           <div className="md:col-span-6 space-y-4">
-            <div className="relative h-52 sm:h-80 bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800 shadow-inner group">
-              <img
-                src={selectedImage || imagesList[0]}
-                alt={product.name}
-                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-              />
-              <span className="absolute top-3 left-3 bg-red-600 text-white font-extrabold text-xs px-3 py-1 rounded-full shadow">
-                {discountPercent}% OFF
-              </span>
-            </div>
+            
+            {hasVideo && activeMediaTab === 'video' ? (
+              /* AI Video Player Stage */
+              <div className="relative w-full aspect-square sm:aspect-square bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex items-center justify-center group select-none">
+                <video
+                  ref={videoRef}
+                  src={resolveVideoUrl(product.video)}
+                  autoPlay
+                  loop
+                  muted={isVideoMuted}
+                  playsInline
+                  onClick={togglePlayVideo}
+                  className="w-full h-full object-contain cursor-pointer"
+                />
 
-            {/* Image Thumbnails */}
-            {imagesList.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-1 no-scrollbar">
-                {imagesList.map((imgUrl, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setSelectedImage(imgUrl)}
-                    className={`w-16 h-16 rounded-xl overflow-hidden border-2 transition-all shrink-0 ${
-                      selectedImage === imgUrl ? 'border-amber-400 scale-105 shadow-md shadow-amber-500/20' : 'border-zinc-800 opacity-60 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={imgUrl} alt="Thumbnail" className="w-full h-full object-cover" />
-                  </button>
-                ))}
+                {/* Top Badges Overlay */}
+                <div className="absolute top-4 left-4 flex items-center gap-2 pointer-events-none">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-500/25 text-amber-300 border border-amber-500/40 backdrop-blur-md shadow-lg shadow-amber-950/50">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>AI 360° PROMO VIDEO</span>
+                  </span>
+                </div>
+
+                {discountPercent > 0 && (
+                  <div className="absolute top-4 right-4 bg-red-600 text-white text-xs font-black px-2.5 py-1 rounded-lg shadow-md pointer-events-none">
+                    -{discountPercent}% OFF
+                  </div>
+                )}
+
+                {/* Bottom Video Controls Overlay */}
+                <div className="absolute bottom-4 left-4 right-4 bg-zinc-950/85 backdrop-blur-md border border-zinc-800 p-2.5 rounded-2xl flex items-center justify-between shadow-2xl">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={togglePlayVideo}
+                      className="w-8 h-8 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 flex items-center justify-center transition-all shadow-md cursor-pointer"
+                      title={isVideoPlaying ? 'Pause Video' : 'Play Video'}
+                    >
+                      {isVideoPlaying ? <Pause className="w-4 h-4 fill-zinc-950" /> : <Play className="w-4 h-4 fill-zinc-950" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={toggleMuteVideo}
+                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                      title={isVideoMuted ? 'Unmute Audio' : 'Mute Audio'}
+                    >
+                      {isVideoMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                    </button>
+
+                    <span className="text-xs font-bold text-zinc-400 hidden sm:inline">
+                      Continuous 360° Rotation
+                    </span>
+                  </div>
+
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20">
+                    AI Commercial
+                  </span>
+                </div>
+              </div>
+            ) : (
+              /* Normal Interactive 360 Viewer */
+              <Shoe360Viewer
+                imagesList={imagesList}
+                productName={product.name}
+                discountPercent={discountPercent}
+              />
+            )}
+
+            {/* Media Mode Selector Switcher (Video vs Angle Photos) */}
+            {hasVideo && (
+              <div className="flex items-center gap-2 p-1.5 bg-zinc-950/80 border border-zinc-800 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setActiveMediaTab('video')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeMediaTab === 'video'
+                      ? 'bg-amber-500 text-zinc-950 font-black shadow-lg shadow-amber-500/20'
+                      : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
+                >
+                  <Video className="w-3.5 h-3.5" />
+                  <span>AI 360° Video</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveMediaTab('images')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeMediaTab === 'images'
+                      ? 'bg-amber-500 text-zinc-950 font-black shadow-lg shadow-amber-500/20'
+                      : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Normal Images ({imagesList.length} Angles)</span>
+                </button>
               </div>
             )}
 
@@ -226,11 +338,11 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
                 </div>
               </div>
 
-
               <div className="flex items-center gap-4 pt-1">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Quantity:</span>
                 <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-xl p-1">
                   <button
+                    type="button"
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                     disabled={quantity <= 1 || isOutOfStock}
                     className="p-2 text-zinc-400 hover:text-white disabled:opacity-30"
@@ -239,6 +351,7 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
                   </button>
                   <span className="px-4 font-mono font-bold text-sm text-amber-400">{quantity}</span>
                   <button
+                    type="button"
                     onClick={() => setQuantity((q) => Math.min(product.stock || 25, q + 1))}
                     disabled={isOutOfStock || (product.stock && quantity >= product.stock)}
                     className="p-2 text-zinc-400 hover:text-white disabled:opacity-30"
@@ -301,3 +414,4 @@ export default function ProductDetailsModal({ product, isOpen, onClose, onBuyNow
     </div>
   );
 }
+
